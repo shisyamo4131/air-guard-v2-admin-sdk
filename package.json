@@ -1,0 +1,23 @@
+{
+  "name": "air-gurd-v2-admin-sdk",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "setup:prod": "node setupSuperUser.js",
+    "setup:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node setupSuperUser.js",
+    "view:prod": "node viewUserClaims.js",
+    "view:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node viewUserClaims.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "firebase-admin": "^13.3.0",
+    "inquirer": "^12.6.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}

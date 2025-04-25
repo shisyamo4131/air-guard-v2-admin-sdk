@@ -1,0 +1,18 @@
+# Dependencies
+/node_modules
+
+# Firebase service account key
+# ★★★ 実際のサービスアカウントキーファイル名に合わせてください ★★★
+air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json
+
+# Environment variables file (if you use one like .env)
+.env*
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+.DS_Store
+Thumbs.db
