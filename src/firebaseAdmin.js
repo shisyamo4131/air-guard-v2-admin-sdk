@@ -3,7 +3,7 @@ const admin = require("firebase-admin");
 
 // --- 設定 ---
 const serviceAccountPath =
-  "./air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8"; // ★★★ 実際のパスに修正してください ★★★
+  "../air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8";
 // -------------
 
 let initializedAdmin;
