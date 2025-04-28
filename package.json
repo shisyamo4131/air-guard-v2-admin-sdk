@@ -9,8 +9,12 @@
     "view:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/viewUserClaims.js",
     "set:superuser:prod": "node src/setSuperUserClaim.js",
     "set:superuser:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setSuperUserClaim.js",
+    "remove:superuser:prod": "node src/removeSuperUserClaim.js",
+    "remove:superuser:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/removeSuperUserClaim.js",
     "set:developer:prod": "node src/setDeveloperClaim.js",
     "set:developer:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setDeveloperClaim.js",
+    "remove:developer:prod": "node src/removeDeveloperClaim.js",
+    "remove:developer:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/removeDeveloperClaim.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
