@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "setup:prod": "node src/setupSuperUser.js",
-    "setup:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setupSuperUser.js",
     "list:prod": "node src/listSuperUsers.js",
     "list:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/listSuperUsers.js",
     "view:prod": "node src/viewUserClaims.js",
     "view:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/viewUserClaims.js",
+    "set:superuser:prod": "node src/setSuperUserClaim.js",
+    "set:superuser:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setSuperUserClaim.js",
     "set:developer:prod": "node src/setDeveloperClaim.js",
     "set:developer:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setDeveloperClaim.js",
     "test": "echo \"Error: no test specified\" && exit 1"
