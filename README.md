@@ -1,17 +1,12 @@
-# AirG- **ユーザー管理**: スーパーユーザーのリスト表示、ユーザークレーム表示
-
-- **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除
-- **システム管理**: メンテナンスモードの制御、システム設定管理
-- **環境対応**: 本番環境とエミュレーター環境の両方に対応
-- **CLI**: 統一されたコマンドラインインターフェース
-- **プログラマティック API**: 他のプロジェクトから直接使用可能 Admin SDK
+# AirGuard Admin SDK
 
 Firebase Admin SDK を使用して AirGuard アプリのユーザー管理を行うための SDK です。
 
 ## 🚀 機能
 
-- **ユーザー管理**: スーパーユーザーのリスト表示、ユーザークレーム表示
+- **ユーザー管理**: スーパーユーザーのリスト表示、ユーザークレーム表示、メールアドレスから UID 取得
 - **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除
+- **システム管理**: メンテナンスモードの制御、システム設定管理
 - **環境対応**: 本番環境とエミュレーター環境の両方に対応
 - **CLI**: 統一されたコマンドラインインターフェース
 - **プログラマティック API**: 他のプロジェクトから直接使用可能
@@ -19,14 +14,18 @@ Firebase Admin SDK を使用して AirGuard アプリのユーザー管理を行
 ## 📁 プロジェクト構造
 
 ```
-src/
-├── index.js          # メインエクスポート（プログラマティック使用）
-├── cli.js            # CLIエントリーポイント
-├── firebaseAdmin.js  # Firebase Admin SDK設定
-├── commands/         # 機能モジュール
-    ├── users.js      # ユーザー管理機能
-    ├── claims.js     # クレーム管理機能
-    └── system.js     # システム管理機能
+├── README.md         # プロジェクト概要とクイックスタート
+├── COMMANDS.md       # 詳細なコマンドリファレンス
+├── package.json      # npm設定と依存関係
+├── air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json  # サービスアカウントキー
+└── src/
+    ├── index.js          # メインエクスポート（プログラマティック使用）
+    ├── cli.js            # CLIエントリーポイント
+    ├── firebaseAdmin.js  # Firebase Admin SDK設定
+    └── commands/         # 機能モジュール
+        ├── users.js      # ユーザー管理機能
+        ├── claims.js     # クレーム管理機能
+        └── system.js     # システム管理機能
 ```
 
 ## 🛠️ インストール・セットアップ
@@ -41,142 +40,43 @@ npm install
 
 ## 💻 CLI 使用方法
 
-### 基本コマンド
+### クイックスタート
 
 ```bash
 # ヘルプを表示
 npm run cli -- --help
+node src/cli.js --help
 
-# サブコマンドのヘルプ
-npm run cli -- users --help
-npm run cli -- claims --help
-npm run cli -- system --help
+# 環境を指定してコマンド実行
+npm run cli users list                    # 本番環境
+npm run cli:emulator users list           # エミュレーター環境
+node src/cli.js --env emulator users list # 直接実行（エミュレーター）
 ```
 
-### ユーザー管理
+### 🔗 詳細なコマンドリファレンス
+
+**📋 [COMMANDS.md](./COMMANDS.md)** で全てのコマンドの詳細な使用方法と例を確認できます。
+
+### 基本的な使用パターン
+
+#### 🌟 推奨方法: 専用スクリプト
 
 ```bash
-# スーパーユーザーリストを表示
-npm run cli -- users list
+# エミュレーター環境用（開発・テスト）
+npm run cli:emulator <command>
 
-# 特定ユーザーのクレームを表示（UID指定）
-npm run cli -- users view <user-uid>
-```
-
-### クレーム管理
-
-```bash
-# スーパーユーザークレームを設定
-npm run cli -- claims set-superuser <uid-or-email>
-
-# スーパーユーザークレームを削除
-npm run cli -- claims remove-superuser <uid-or-email>
-
-# デベロッパークレームを設定（要スーパーユーザー）
-npm run cli -- claims set-developer <uid-or-email>
-
-# デベロッパークレームを削除
-npm run cli -- claims remove-developer <uid-or-email>
-```
-
-### 環境指定
-
-#### 方法 1: 専用スクリプト（推奨）
-
-```bash
-# エミュレーター環境用
-npm run cli:emulator system status
-npm run cli:emulator users list
-
-# 本番環境用
-npm run cli:prod system status
-npm run cli users list  # デフォルトで本番環境
-```
-
-#### 方法 2: 直接実行
-
-```bash
-# 本番環境
-node src/cli.js system status
-
-# エミュレーター環境
-node src/cli.js --env emulator system status
-
-# カスタムエミュレーターホスト
-node src/cli.js --env emulator --emulator-host localhost:9099 system status
-```
-
-#### 方法 3: npm run (従来方式)
-
-```bash
-# ⚠️ 注意: この方式はnpm warningが出ます
-npm run cli -- --env emulator users list
-```
-
-### システム管理
-
-#### 本番環境
-
-```bash
-npm run cli system status
-npm run cli system maintenance-on
-npm run cli system maintenance-off
-npm run cli system maintenance-toggle
-npm run cli system init
-```
-
-#### エミュレーター環境
-
-```bash
-npm run cli:emulator system status
-npm run cli:emulator system maintenance-on
-npm run cli:emulator system maintenance-off
+# 本番環境用（本番運用）
+npm run cli <command>
 ```
 
 #### 直接実行
 
 ```bash
-# 本番環境
-node src/cli.js system status
+# 本番環境（デフォルト）
+node src/cli.js <command>
 
 # エミュレーター環境
-node src/cli.js --env emulator system status
-```
-
-### 使用例
-
-#### 推奨: 専用スクリプト使用
-
-```bash
-# 本番環境でスーパーユーザーをリスト
-npm run cli users list
-
-# エミュレーター環境でユーザークレームを確認
-npm run cli:emulator users view abc123def456
-
-# 本番環境でスーパーユーザークレームを設定
-npm run cli claims set-superuser user@example.com
-
-# エミュレーター環境でデベロッパークレームを設定
-npm run cli:emulator claims set-developer abc123def456
-
-# 本番環境でメンテナンスモードを有効化
-npm run cli system maintenance-on
-
-# エミュレーター環境でシステム状態を確認
-npm run cli:emulator system status
-```
-
-#### 直接実行
-
-```bash
-# 本番環境
-node src/cli.js users list
-node src/cli.js system maintenance-on
-
-# エミュレーター環境
-node src/cli.js --env emulator users list
-node src/cli.js --env emulator system status
+node src/cli.js --env emulator <command>
 ```
 
 ````
@@ -243,43 +143,60 @@ async function example() {
 
 - Firebase Admin SDK が本番プロジェクトに接続
 - サービスアカウントキーが必要
+- 出力: `☁️ Connecting to Production Firebase environment.`
 
 ### エミュレーター環境
 
-- `FIREBASE_AUTH_EMULATOR_HOST` 環境変数が自動設定
-- デフォルト: `localhost:9099`
+- Firebase Auth/Firestore エミュレーターに接続
+- デフォルト接続先: `localhost:9099` (AUTH), `localhost:8080` (FIRESTORE)
+- 出力: `🔌 Connecting to Firebase Emulator:`
 
-## 🆚 旧バージョンからの移行
+詳細な環境設定と注意事項は **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
 
-### 旧形式（廃止予定）
+## 🆚 新しい CLI 構造
 
-```bash
-npm run list:prod
-npm run set:superuser:emulator
-```
-
-### 新形式（推奨）
+### 最新の推奨使用方法
 
 ```bash
-npm run cli -- users list
-npm run cli -- --env emulator claims set-superuser <uid>
+# ✅ 推奨: 専用スクリプト
+npm run cli users list                    # 本番環境
+npm run cli:emulator users get-uid <email> # エミュレーター環境
+
+# ✅ 推奨: 直接実行
+node src/cli.js users list                # 本番環境
+node src/cli.js --env emulator users list # エミュレーター環境
 ```
 
-## 📋 利用可能なコマンド一覧
+### 主な変更点
 
-| カテゴリ   | コマンド                        | 説明                     |
-| ---------- | ------------------------------- | ------------------------ |
-| **Users**  | `users list`                    | スーパーユーザー一覧表示 |
-|            | `users view <uid>`              | ユーザークレーム表示     |
-| **Claims** | `claims set-superuser <uid>`    | スーパーユーザー設定     |
-|            | `claims remove-superuser <uid>` | スーパーユーザー削除     |
-|            | `claims set-developer <uid>`    | デベロッパー設定         |
-|            | `claims remove-developer <uid>` | デベロッパー削除         |
-| **System** | `system status`                 | システム状態表示         |
-|            | `system maintenance-on`         | メンテナンス有効化       |
-|            | `system maintenance-off`        | メンテナンス無効化       |
-|            | `system maintenance-toggle`     | メンテナンス切り替え     |
-|            | `system init`                   | システム初期化           |
+- **統一された CLI**: 全ての機能が`src/cli.js`から利用可能
+- **明確な環境切り替え**: `--env emulator`フラグまたは専用スクリプト
+- **新機能追加**: `users get-uid <email>` コマンド
+- **簡潔なコマンド**: npm scripts の簡素化
+- **改良されたヘルプ**: より詳細な使用例とドキュメント
+- **📋 専用ドキュメント**: [COMMANDS.md](./COMMANDS.md) でコマンドの詳細を管理
+
+### 🆕 新機能: メールアドレスから UID 取得
+
+```bash
+# ユーザーのメールアドレスからUIDを取得
+npm run cli users get-uid user@example.com
+npm run cli:emulator users get-uid test@local.com
+```
+
+詳細な出力例と使用方法は **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
+
+## 📋 コマンドリファレンス
+
+全てのコマンドの詳細な使用方法、引数、出力例については **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
+
+### 🎯 主要コマンド概要
+
+- **👥 ユーザー管理**: `users list`, `users view <uid>`, `users get-uid <email>`
+- **🏷️ クレーム管理**: `claims set-superuser <uid>`, `claims set-developer <uid>`
+- **⚙️ システム管理**: `system status`, `system maintenance-on/off/toggle`
+
+各コマンドの詳細な説明、パラメータ、使用例は [COMMANDS.md](./COMMANDS.md) で確認できます。
 
 ## 🐛 トラブルシューティング
 
@@ -316,9 +233,17 @@ npm run cli -- --env emulator claims set-superuser <uid>
 ### テスト
 
 ```bash
-# CLIテスト
+# CLIテスト - 基本ヘルプ
 npm run cli -- --help
+node src/cli.js --help
 
 # 機能テスト（エミュレーター推奨）
-npm run cli -- --env emulator users list
+npm run cli:emulator users list
+npm run cli:emulator system status
+
+# 本番環境テスト（注意して実行）
+npm run cli users list
+npm run cli system status
 ```
+
+詳細なテスト手順とワークフローは **[COMMANDS.md](./COMMANDS.md)** をご覧ください。

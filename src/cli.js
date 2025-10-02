@@ -73,6 +73,14 @@ usersCmd
     await usersCommands.viewUserClaims(uid, globalOpts);
   });
 
+usersCmd
+  .command("get-uid <email>")
+  .description("Get UID by email address")
+  .action(async (email, options, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await usersCommands.getUidByEmail(email, globalOpts);
+  });
+
 // claims サブコマンド
 const claimsCmd = program
   .command("claims")
@@ -161,12 +169,14 @@ program.on("--help", () => {
   console.log("Examples (推奨):");
   console.log("  $ npm run cli users list");
   console.log("  $ npm run cli:emulator users view <uid>");
+  console.log("  $ npm run cli users get-uid <email>");
   console.log("  $ npm run cli claims set-superuser <uid>");
   console.log("  $ npm run cli:emulator system status");
   console.log("  $ npm run cli system maintenance-on");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
+  console.log("  $ node src/cli.js users get-uid user@example.com");
   console.log("  $ node src/cli.js --env emulator system status");
   console.log("");
 });
