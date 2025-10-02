@@ -1,20 +1,11 @@
 {
   "name": "air-gurd-v2-admin-sdk",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "list:prod": "node src/listSuperUsers.js",
-    "list:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/listSuperUsers.js",
-    "view:prod": "node src/viewUserClaims.js",
-    "view:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/viewUserClaims.js",
-    "set:superuser:prod": "node src/setSuperUserClaim.js",
-    "set:superuser:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setSuperUserClaim.js",
-    "remove:superuser:prod": "node src/removeSuperUserClaim.js",
-    "remove:superuser:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/removeSuperUserClaim.js",
-    "set:developer:prod": "node src/setDeveloperClaim.js",
-    "set:developer:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/setDeveloperClaim.js",
-    "remove:developer:prod": "node src/removeDeveloperClaim.js",
-    "remove:developer:emulator": "cross-env FIREBASE_AUTH_EMULATOR_HOST=\"localhost:9099\" node src/removeDeveloperClaim.js",
+    "cli": "node src/cli.js",
+    "cli:emulator": "cross-env NODE_ENV=emulator node src/cli.js --env emulator",
+    "cli:prod": "cross-env NODE_ENV=production node src/cli.js --env prod",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -22,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "commander": "^14.0.1",
     "firebase-admin": "^13.3.0",
     "inquirer": "^12.6.0"
   },

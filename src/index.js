@@ -1,0 +1,128 @@
+/**
+const usersCommands = require('./commands/users');
+const claimsCommands = require('./co  claims: {
+    setSuperUserClaim: claimsCommands.setSuperUserClaim,
+    removeSuperUserClaim: claimsCommands.removeSuperUserClaim,
+    setDeveloperClaim: claimsCommands.setDeveloperClaim,
+    removeDeveloperClaim: claimsCommands.removeDeveloperClaim
+  },
+  
+  system: {
+    getMaintenanceStatus: systemCommands.getMaintenanceStatus,
+    enableMaintenance: systemCommands.enableMaintenance,
+    disableMaintenance: systemCommands.disableMaintenance,
+    toggleMaintenance: systemCommands.toggleMaintenance,
+    initializeSystem: systemCommands.initializeSystem
+  }/claims');
+const systemCommands = require('./commands/system'); AirGuard Admin SDK
+ * プログラマティック使用のためのメインエクスポート
+ */
+
+const usersCommands = require("./commands/users");
+const claimsCommands = require("./commands/claims");
+
+/**
+ * AirGuard Admin SDK メインクラス
+ */
+class AirGuardAdminSDK {
+  constructor(options = {}) {
+    this.options = {
+      env: "prod",
+      emulatorHost: "localhost:9099",
+      ...options,
+    };
+  }
+
+  /**
+   * 環境設定を更新
+   */
+  setEnvironment(env, emulatorHost = "localhost:9099") {
+    this.options.env = env;
+    this.options.emulatorHost = emulatorHost;
+  }
+
+  // Users commands
+  async listSuperUsers() {
+    return await usersCommands.listSuperUsers(this.options);
+  }
+
+  async viewUserClaims(uid) {
+    return await usersCommands.viewUserClaims(uid, this.options);
+  }
+
+  async viewUserClaimsByEmail(email) {
+    return await usersCommands.viewUserClaimsByEmail(email, this.options);
+  }
+
+  // Claims commands
+  async setSuperUserClaim(identifier) {
+    return await claimsCommands.setSuperUserClaim(identifier, this.options);
+  }
+
+  async removeSuperUserClaim(identifier) {
+    return await claimsCommands.removeSuperUserClaim(identifier, this.options);
+  }
+
+  async setDeveloperClaim(identifier) {
+    return await claimsCommands.setDeveloperClaim(identifier, this.options);
+  }
+
+  async removeDeveloperClaim(identifier) {
+    return await claimsCommands.removeDeveloperClaim(identifier, this.options);
+  }
+
+  // System commands
+  async getMaintenanceStatus() {
+    return await systemCommands.getMaintenanceStatus(this.options);
+  }
+
+  async enableMaintenance() {
+    return await systemCommands.enableMaintenance(this.options);
+  }
+
+  async disableMaintenance() {
+    return await systemCommands.disableMaintenance(this.options);
+  }
+
+  async toggleMaintenance() {
+    return await systemCommands.toggleMaintenance(this.options);
+  }
+
+  async initializeSystem() {
+    return await systemCommands.initializeSystem(this.options);
+  }
+}
+
+// 直接関数エクスポート（旧バージョン互換）
+module.exports = {
+  AirGuardAdminSDK,
+
+  // 直接関数アクセス
+  users: {
+    listSuperUsers: usersCommands.listSuperUsers,
+    viewUserClaims: usersCommands.viewUserClaims,
+    viewUserClaimsByEmail: usersCommands.viewUserClaimsByEmail,
+  },
+
+  claims: {
+    setSuperUserClaim: claimsCommands.setSuperUserClaim,
+    removeSuperUserClaim: claimsCommands.removeSuperUserClaim,
+    setDeveloperClaim: claimsCommands.setDeveloperClaim,
+    removeDeveloperClaim: claimsCommands.removeDeveloperClaim,
+  },
+};
+
+/**
+ * 使用例:
+ *
+ * // クラス使用
+ * const { AirGuardAdminSDK } = require('air-guard-v2-admin-sdk');
+ * const sdk = new AirGuardAdminSDK({ env: 'emulator' });
+ * await sdk.listSuperUsers();
+ *
+ * // 直接関数使用
+ * const { users, claims, system } = require('air-guard-v2-admin-sdk');
+ * await users.listSuperUsers({ env: 'prod' });
+ * await claims.setSuperUserClaim('user@example.com', { env: 'emulator' });
+ * await system.enableMaintenance({ env: 'prod' });
+ */
