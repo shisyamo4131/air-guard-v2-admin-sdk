@@ -36,6 +36,7 @@ setupEnvironmentEarly();
 const usersCommands = require("./commands/users");
 const claimsCommands = require("./commands/claims");
 const systemCommands = require("./commands/system");
+const companiesCommands = require("./commands/companies");
 
 // プログラムの基本設定
 program
@@ -163,6 +164,60 @@ systemCmd
     await systemCommands.initializeSystem(globalOpts);
   });
 
+// companies サブコマンド
+const companiesCmd = program
+  .command("companies")
+  .description("Company management operations");
+
+companiesCmd
+  .command("info <companyId>")
+  .description("Get company information")
+  .action(async (companyId, options, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await companiesCommands.getCompanyInfo(companyId, globalOpts);
+  });
+
+companiesCmd
+  .command("users <companyId>")
+  .description("List all users for a company")
+  .action(async (companyId, options, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await companiesCommands.listCompanyUsers(companyId, globalOpts);
+  });
+
+companiesCmd
+  .command("delete <companyId>")
+  .description("Delete company and all related data (⚠️ DANGEROUS)")
+  .option("-f, --force", "Skip confirmation")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+
+    // 確認プロンプト
+    if (!cmdOptions.force) {
+      const readline = require("readline").createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      await new Promise((resolve) => {
+        readline.question(
+          `\n⚠️  本当に会社 ${companyId} とそのすべてのデータを削除しますか？ (yes/no): `,
+          (answer) => {
+            readline.close();
+            if (answer.toLowerCase() === "yes") {
+              resolve();
+            } else {
+              console.log("\n❌ 操作がキャンセルされました。");
+              process.exit(0);
+            }
+          }
+        );
+      });
+    }
+
+    await companiesCommands.deleteCompany(companyId, globalOpts);
+  });
+
 // ヘルプの改善
 program.on("--help", () => {
   console.log("");
@@ -173,11 +228,16 @@ program.on("--help", () => {
   console.log("  $ npm run cli claims set-superuser <uid>");
   console.log("  $ npm run cli:emulator system status");
   console.log("  $ npm run cli system maintenance-on");
+  console.log("  $ npm run cli companies info <companyId>");
+  console.log("  $ npm run cli:emulator companies delete <companyId>");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
   console.log("  $ node src/cli.js users get-uid user@example.com");
   console.log("  $ node src/cli.js --env emulator system status");
+  console.log(
+    "  $ node src/cli.js --env emulator companies delete <companyId>"
+  );
   console.log("");
 });
 

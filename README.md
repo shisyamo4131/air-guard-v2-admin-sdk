@@ -1,31 +1,35 @@
 # AirGuard Admin SDK
 
-Firebase Admin SDK を使用して AirGuard アプリのユーザー管理を行うための SDK です。
+Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うための SDK です。
 
 ## 🚀 機能
 
 - **ユーザー管理**: スーパーユーザーのリスト表示、ユーザークレーム表示、メールアドレスから UID 取得
 - **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除
 - **システム管理**: メンテナンスモードの制御、システム設定管理
-- **環境対応**: 本番環境とエミュレーター環境の両方に対応
+- **会社管理**: 会社情報表示、ユーザー一覧、会社データ一括削除
+- **環境対応**: Emulator・Dev・Prod 環境の切り替え対応
 - **CLI**: 統一されたコマンドラインインターフェース
 - **プログラマティック API**: 他のプロジェクトから直接使用可能
 
 ## 📁 プロジェクト構造
 
 ```
-├── README.md         # プロジェクト概要とクイックスタート
-├── COMMANDS.md       # 詳細なコマンドリファレンス
-├── package.json      # npm設定と依存関係
-├── air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json  # サービスアカウントキー
+├── README.md # プロジェクト概要
+├── COMMANDS.md # 詳細なコマンドリファレンス
+├── package.json # npm設定と依存関係
+├── .gitignore # Git除外設定
+├── air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json # Dev環境の秘密鍵
+├── air-guard-v2-prod-firebase-adminsdk-xxxxx.json # Prod環境の秘密鍵（将来追加）
 └── src/
-    ├── index.js          # メインエクスポート（プログラマティック使用）
-    ├── cli.js            # CLIエントリーポイント
-    ├── firebaseAdmin.js  # Firebase Admin SDK設定
-    └── commands/         # 機能モジュール
-        ├── users.js      # ユーザー管理機能
-        ├── claims.js     # クレーム管理機能
-        └── system.js     # システム管理機能
+├── index.js # メインエクスポート（プログラマティック使用）
+├── cli.js # CLIエントリーポイント
+├── firebaseAdmin.js # Firebase Admin SDK設定（環境切り替え対応）
+└── commands/ # 機能モジュール
+├── users.js # ユーザー管理機能
+├── claims.js # クレーム管理機能
+├── system.js # システム管理機能
+└── companies.js # 会社管理機能
 ```
 
 ## 🛠️ インストール・セットアップ
@@ -35,8 +39,53 @@ Firebase Admin SDK を使用して AirGuard アプリのユーザー管理を行
 npm install
 
 # Firebase Admin SDK サービスアカウントキーを配置
-# air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json
+# Dev環境: [air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json](http://_vscodecontentref_/8)
+# Prod環境: air-guard-v2-prod-firebase-adminsdk-xxxxx.json（将来追加）
 ```
+
+### 🌍 環境について
+
+この SDK は 3 つの環境をサポートしています：
+
+1. 🧪 Emulator 環境（ローカルテスト）
+   用途: 開発・テスト・デバッグ
+   接続先: Firebase Emulator（localhost）
+   秘密鍵: Dev 環境の秘密鍵を使用
+   データ: ローカルのみ、実データに影響なし
+   表示: 🔌 Connecting to Firebase Emulator:
+
+```
+npm run cli:emulator <command>
+```
+
+2. 🔧 Dev 環境（開発用 Firebase）
+   用途: 開発・統合テスト・基盤構築
+   接続先: Firebase 開発プロジェクト
+   秘密鍵: air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json
+   データ: 開発用データ
+   表示: ☁️ Connecting to Development Firebase environment.
+
+```
+npm run cli:dev <command>
+```
+
+3. 🚀 Prod 環境（本番用 Firebase - 将来実装）
+   用途: 本番運用
+   接続先: Firebase 本番プロジェクト
+   秘密鍵: air-guard-v2-prod-firebase-adminsdk-xxxxx.json（準備中）
+   データ: 実際のユーザーデータ
+   表示: ☁️ Connecting to Production Firebase environment.
+
+```
+npm run cli:prod <command>
+```
+
+環境切り替えの仕組み
+firebaseAdmin.js が環境変数を元に自動的に適切な秘密鍵を選択します：
+
+Emulator: FIREBASE_AUTH_EMULATOR_HOST または FIRESTORE_EMULATOR_HOST が設定されている場合
+Dev: デフォルト、または FIREBASE_ENV=dev
+Prod: FIREBASE_ENV=prod（将来実装）
 
 ## 💻 CLI 使用方法
 
@@ -45,80 +94,113 @@ npm install
 ```bash
 # ヘルプを表示
 npm run cli -- --help
-node src/cli.js --help
 
 # 環境を指定してコマンド実行
-npm run cli users list                    # 本番環境
-npm run cli:emulator users list           # エミュレーター環境
-node src/cli.js --env emulator users list # 直接実行（エミュレーター）
+npm run cli:emulator users list    # Emulator環境（安全）
+npm run cli:dev users list          # Dev環境
+npm run cli:prod users list         # Prod環境（将来実装）
+```
+
+```bash
+# Emulator環境（開発・テスト - 推奨）
+npm run cli:emulator system status
+npm run cli:emulator companies info <companyId>
+
+# Dev環境（開発用Firebase）
+npm run cli:dev users list
+npm run cli:dev system maintenance-on
+
+# 直接実行
+node src/cli.js --env emulator users list
+node src/cli.js users list  # デフォルトはDev環境
 ```
 
 ### 🔗 詳細なコマンドリファレンス
 
 **📋 [COMMANDS.md](./COMMANDS.md)** で全てのコマンドの詳細な使用方法と例を確認できます。
 
-### 基本的な使用パターン
+### 📋 主要コマンド
 
-#### 🌟 推奨方法: 専用スクリプト
-
-```bash
-# エミュレーター環境用（開発・テスト）
-npm run cli:emulator <command>
-
-# 本番環境用（本番運用）
-npm run cli <command>
-```
-
-#### 直接実行
+#### 👥 ユーザー管理
 
 ```bash
-# 本番環境（デフォルト）
-node src/cli.js <command>
-
-# エミュレーター環境
-node src/cli.js --env emulator <command>
+npm run cli:emulator users list                    # スーパーユーザー一覧
+npm run cli:emulator users view <uid>              # ユーザー情報表示
+npm run cli:emulator users get-uid <email>         # メールからUID取得
 ```
 
-````
+#### 🏷️ クレーム管理
+
+```bash
+npm run cli:emulator claims set-superuser <uid>    # スーパーユーザー設定
+npm run cli:emulator claims remove-superuser <uid> # スーパーユーザー削除
+npm run cli:emulator claims set-developer <uid>    # デベロッパー設定
+npm run cli:emulator claims remove-developer <uid> # デベロッパー削除
+```
+
+#### ⚙️ システム管理
+
+```bash
+npm run cli:emulator system status                 # システム状態確認
+npm run cli:emulator system maintenance-on         # メンテナンス有効化
+npm run cli:emulator system maintenance-off        # メンテナンス無効化
+npm run cli:emulator system maintenance-toggle     # メンテナンス切り替え
+npm run cli:emulator system init                   # システム初期化
+```
+
+#### 🏢 会社管理
+
+```bash
+npm run cli:emulator companies info <companyId>    # 会社情報表示
+npm run cli:emulator companies users <companyId>   # 会社のユーザー一覧
+npm run cli:emulator companies delete <companyId>  # 会社データ一括削除（⚠️危険）
+npm run cli:emulator companies delete <companyId> --force  # 確認スキップ
+```
+
+詳細は COMMANDS.md をご覧ください。
 
 ## 🔧 プログラマティック使用
 
 ### クラス使用
 
 ```javascript
-const { AirGuardAdminSDK } = require("./src/index.js");
+const { AirGuardAdminSDK } = require("air-guard-v2-admin-sdk");
 
-// インスタンス作成
-const sdk = new AirGuardAdminSDK({
-  env: "emulator",
-  emulatorHost: "localhost:9099",
-});
+const sdk = new AirGuardAdminSDK({ env: "emulator" });
 
-// 使用例
 async function example() {
   try {
-    // スーパーユーザーリストを取得
+    // ユーザー管理
     await sdk.listSuperUsers();
-
-    // ユーザークレームを表示
     await sdk.viewUserClaims("user-uid");
+    await sdk.getUidByEmail("user@example.com");
 
-    // スーパーユーザークレームを設定
+    // クレーム管理
     await sdk.setSuperUserClaim("user@example.com");
+    await sdk.setDeveloperClaim("user-uid");
 
-    // 環境を変更
-    sdk.setEnvironment("prod");
+    // システム管理
+    await sdk.getMaintenanceStatus();
+    await sdk.enableMaintenance();
+
+    // 会社管理
+    await sdk.getCompanyInfo("company-id-123");
+    await sdk.listCompanyUsers("company-id-123");
+    await sdk.deleteCompany("company-id-123");
+
+    // 環境切り替え
+    sdk.setEnvironment("dev");
     await sdk.listSuperUsers();
   } catch (error) {
     console.error("Error:", error.message);
   }
 }
-````
+```
 
 ### 直接関数使用
 
 ```javascript
-const { users, claims } = require("./src/index.js");
+const { users, claims, system, companies } = require("air-guard-v2-admin-sdk");
 
 async function example() {
   const options = { env: "emulator" };
@@ -126,77 +208,22 @@ async function example() {
   try {
     // ユーザー管理
     await users.listSuperUsers(options);
-    await users.viewUserClaims("user-uid", options);
+    await users.getUidByEmail("user@example.com", options);
 
     // クレーム管理
-    await claims.setSuperUserClaim("user@example.com", options);
-    await claims.setDeveloperClaim("user-uid", { env: "prod" });
+    await claims.setSuperUserClaim("user-uid", options);
+
+    // システム管理
+    await system.enableMaintenance(options);
+
+    // 会社管理
+    await companies.getCompanyInfo("company-id-123", options);
+    await companies.deleteCompany("company-id-123", options);
   } catch (error) {
     console.error("Error:", error.message);
   }
 }
 ```
-
-## 🔐 環境設定
-
-### 本番環境
-
-- Firebase Admin SDK が本番プロジェクトに接続
-- サービスアカウントキーが必要
-- 出力: `☁️ Connecting to Production Firebase environment.`
-
-### エミュレーター環境
-
-- Firebase Auth/Firestore エミュレーターに接続
-- デフォルト接続先: `localhost:9099` (AUTH), `localhost:8080` (FIRESTORE)
-- 出力: `🔌 Connecting to Firebase Emulator:`
-
-詳細な環境設定と注意事項は **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
-
-## 🆚 新しい CLI 構造
-
-### 最新の推奨使用方法
-
-```bash
-# ✅ 推奨: 専用スクリプト
-npm run cli users list                    # 本番環境
-npm run cli:emulator users get-uid <email> # エミュレーター環境
-
-# ✅ 推奨: 直接実行
-node src/cli.js users list                # 本番環境
-node src/cli.js --env emulator users list # エミュレーター環境
-```
-
-### 主な変更点
-
-- **統一された CLI**: 全ての機能が`src/cli.js`から利用可能
-- **明確な環境切り替え**: `--env emulator`フラグまたは専用スクリプト
-- **新機能追加**: `users get-uid <email>` コマンド
-- **簡潔なコマンド**: npm scripts の簡素化
-- **改良されたヘルプ**: より詳細な使用例とドキュメント
-- **📋 専用ドキュメント**: [COMMANDS.md](./COMMANDS.md) でコマンドの詳細を管理
-
-### 🆕 新機能: メールアドレスから UID 取得
-
-```bash
-# ユーザーのメールアドレスからUIDを取得
-npm run cli users get-uid user@example.com
-npm run cli:emulator users get-uid test@local.com
-```
-
-詳細な出力例と使用方法は **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
-
-## 📋 コマンドリファレンス
-
-全てのコマンドの詳細な使用方法、引数、出力例については **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
-
-### 🎯 主要コマンド概要
-
-- **👥 ユーザー管理**: `users list`, `users view <uid>`, `users get-uid <email>`
-- **🏷️ クレーム管理**: `claims set-superuser <uid>`, `claims set-developer <uid>`
-- **⚙️ システム管理**: `system status`, `system maintenance-on/off/toggle`
-
-各コマンドの詳細な説明、パラメータ、使用例は [COMMANDS.md](./COMMANDS.md) で確認できます。
 
 ## 🐛 トラブルシューティング
 
@@ -207,43 +234,103 @@ npm run cli:emulator users get-uid test@local.com
    ```bash
    # サービスアカウントキーのパスを確認
    # firebaseAdmin.js内のパス設定を確認
+   # 環境に応じた正しい秘密鍵が配置されているか確認
    ```
 
 2. **エミュレーター接続エラー**
 
    ```bash
    # Firebaseエミュレーターが起動していることを確認
-   firebase emulators:start --only auth
+   firebase emulators:start --only auth,firestore
+
+   # エミュレーターのポートを確認
+   # AUTH: localhost:9099
+   # FIRESTORE: localhost:8080
    ```
 
 3. **権限エラー**
+
    ```bash
    # サービスアカウントに適切な権限があることを確認
-   # Firebase Authentication Admin権限が必要
+   # 必要な権限:
+   # - Firebase Authentication Admin
+   # - Cloud Firestore Admin
    ```
+
+4. **環境切り替えエラー**
+
+   ```bash
+   # 環境変数が正しく設定されているか確認
+   echo $FIREBASE_ENV
+
+   # 秘密鍵ファイルが存在するか確認
+   ls -la air-guard-v2-*-firebase-adminsdk-*.json
+   ```
+
+## ⚠️ 重要な注意事項
+
+### セキュリティ
+
+- **秘密鍵の管理**: `.gitignore`に秘密鍵を追加済み（`*-firebase-adminsdk-*.json`）
+- **環境の分離**: 必ず適切な環境を選択してコマンド実行
+- **本番環境**: Prod 環境での操作は特に慎重に
+
+### データ削除
+
+- **`companies delete`コマンド**: 取り消しできない操作
+- **確認プロンプト**: デフォルトで確認あり、`--force`で強制実行可能
+- **テスト推奨**: 必ず Emulator 環境でテストしてから Dev/Prod 環境で実行
+
+### 環境の選択
+
+```bash
+# ✅ 開発・テスト: Emulator環境を使用（推奨）
+npm run cli:emulator <command>
+
+# ✅ 統合テスト・基盤構築: Dev環境を使用
+npm run cli:dev <command>
+
+# ⚠️ 本番運用: Prod環境を使用（将来実装、慎重に）
+npm run cli:prod <command>
+```
 
 ## 📝 開発
 
-### 新機能追加
+### 新機能追加の手順
 
 1. `src/commands/` に新しいモジュールを追加
 2. `src/cli.js` にコマンドを登録
 3. `src/index.js` にプログラマティック API を追加
+4. `COMMANDS.md` にドキュメントを追加
 
 ### テスト
 
 ```bash
-# CLIテスト - 基本ヘルプ
+# CLIテスト
 npm run cli -- --help
-node src/cli.js --help
 
-# 機能テスト（エミュレーター推奨）
+# Emulator環境でのテスト（推奨 - 安全）
 npm run cli:emulator users list
 npm run cli:emulator system status
+npm run cli:emulator companies info <companyId>
+
+# Dev環境でのテスト
+npm run cli:dev users list
+npm run cli:dev system status
 
 # 本番環境テスト（注意して実行）
-npm run cli users list
-npm run cli system status
+npm run cli:prod users list
+npm run cli:prod system status
 ```
 
 詳細なテスト手順とワークフローは **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
+
+## 📜 ライセンス
+
+ISC
+
+---
+
+**📖 詳細なドキュメント**: [COMMANDS.md](./COMMANDS.md)  
+**🐛 問題報告**: GitHub Issues  
+**💬 質問・相談**: GitHub Discussions

@@ -1,25 +1,12 @@
 /**
-const usersCommands = require('./commands/users');
-const claimsCommands = require('./co  claims: {
-    setSuperUserClaim: claimsCommands.setSuperUserClaim,
-    removeSuperUserClaim: claimsCommands.removeSuperUserClaim,
-    setDeveloperClaim: claimsCommands.setDeveloperClaim,
-    removeDeveloperClaim: claimsCommands.removeDeveloperClaim
-  },
-  
-  system: {
-    getMaintenanceStatus: systemCommands.getMaintenanceStatus,
-    enableMaintenance: systemCommands.enableMaintenance,
-    disableMaintenance: systemCommands.disableMaintenance,
-    toggleMaintenance: systemCommands.toggleMaintenance,
-    initializeSystem: systemCommands.initializeSystem
-  }/claims');
-const systemCommands = require('./commands/system'); AirGuard Admin SDK
+ * AirGuard Admin SDK
  * プログラマティック使用のためのメインエクスポート
  */
 
 const usersCommands = require("./commands/users");
 const claimsCommands = require("./commands/claims");
+const systemCommands = require("./commands/system");
+const companiesCommands = require("./commands/companies");
 
 /**
  * AirGuard Admin SDK メインクラス
@@ -50,8 +37,8 @@ class AirGuardAdminSDK {
     return await usersCommands.viewUserClaims(uid, this.options);
   }
 
-  async viewUserClaimsByEmail(email) {
-    return await usersCommands.viewUserClaimsByEmail(email, this.options);
+  async getUidByEmail(email) {
+    return await usersCommands.getUidByEmail(email, this.options);
   }
 
   // Claims commands
@@ -91,6 +78,19 @@ class AirGuardAdminSDK {
   async initializeSystem() {
     return await systemCommands.initializeSystem(this.options);
   }
+
+  // Companies commands
+  async getCompanyInfo(companyId) {
+    return await companiesCommands.getCompanyInfo(companyId, this.options);
+  }
+
+  async listCompanyUsers(companyId) {
+    return await companiesCommands.listCompanyUsers(companyId, this.options);
+  }
+
+  async deleteCompany(companyId) {
+    return await companiesCommands.deleteCompany(companyId, this.options);
+  }
 }
 
 // 直接関数エクスポート（旧バージョン互換）
@@ -101,7 +101,7 @@ module.exports = {
   users: {
     listSuperUsers: usersCommands.listSuperUsers,
     viewUserClaims: usersCommands.viewUserClaims,
-    viewUserClaimsByEmail: usersCommands.viewUserClaimsByEmail,
+    getUidByEmail: usersCommands.getUidByEmail,
   },
 
   claims: {
@@ -109,6 +109,20 @@ module.exports = {
     removeSuperUserClaim: claimsCommands.removeSuperUserClaim,
     setDeveloperClaim: claimsCommands.setDeveloperClaim,
     removeDeveloperClaim: claimsCommands.removeDeveloperClaim,
+  },
+
+  system: {
+    getMaintenanceStatus: systemCommands.getMaintenanceStatus,
+    enableMaintenance: systemCommands.enableMaintenance,
+    disableMaintenance: systemCommands.disableMaintenance,
+    toggleMaintenance: systemCommands.toggleMaintenance,
+    initializeSystem: systemCommands.initializeSystem,
+  },
+
+  companies: {
+    getCompanyInfo: companiesCommands.getCompanyInfo,
+    listCompanyUsers: companiesCommands.listCompanyUsers,
+    deleteCompany: companiesCommands.deleteCompany,
   },
 };
 
@@ -119,10 +133,14 @@ module.exports = {
  * const { AirGuardAdminSDK } = require('air-guard-v2-admin-sdk');
  * const sdk = new AirGuardAdminSDK({ env: 'emulator' });
  * await sdk.listSuperUsers();
+ * await sdk.getCompanyInfo('company-id-123');
+ * await sdk.deleteCompany('company-id-123');
  *
  * // 直接関数使用
- * const { users, claims, system } = require('air-guard-v2-admin-sdk');
+ * const { users, claims, system, companies } = require('air-guard-v2-admin-sdk');
  * await users.listSuperUsers({ env: 'prod' });
  * await claims.setSuperUserClaim('user@example.com', { env: 'emulator' });
  * await system.enableMaintenance({ env: 'prod' });
+ * await companies.getCompanyInfo('company-id-123', { env: 'emulator' });
+ * await companies.deleteCompany('company-id-123', { env: 'emulator' });
  */

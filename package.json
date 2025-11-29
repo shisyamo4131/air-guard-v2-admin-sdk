@@ -4,9 +4,9 @@
   "main": "src/index.js",
   "scripts": {
     "cli": "node src/cli.js",
-    "cli:emulator": "cross-env NODE_ENV=emulator node src/cli.js --env emulator",
-    "cli:prod": "cross-env NODE_ENV=production node src/cli.js --env prod",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "cli:dev": "cross-env FIREBASE_ENV=dev node src/cli.js",
+    "cli:prod": "cross-env FIREBASE_ENV=prod node src/cli.js",
+    "cli:emulator": "cross-env FIREBASE_ENV=dev node src/cli.js --env emulator"
   },
   "keywords": [],
   "author": "",

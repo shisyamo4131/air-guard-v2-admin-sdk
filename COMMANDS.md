@@ -31,6 +31,15 @@
 | `system maintenance-toggle` | メンテナンス切り替え | なし |
 | `system init`               | システム初期化       | なし |
 
+### 🏢 会社管理 (Companies)
+
+| コマンド                       | 説明                                      | 引数                 |
+| ------------------------------ | ----------------------------------------- | -------------------- |
+| `companies info <companyId>`   | 会社情報を表示                            | `companyId`: 会社 ID |
+| `companies users <companyId>`  | 会社に紐づくユーザー一覧を表示            | `companyId`: 会社 ID |
+| `companies delete <companyId>` | 会社とすべての関連データを削除（⚠️ 危険） | `companyId`: 会社 ID |
+|                                | オプション: `-f, --force` 確認スキップ    | `companyId`: 会社 ID |
+
 ## 🌟 基本的な使用方法
 
 ### 専用スクリプトを使用（推奨）
@@ -199,6 +208,20 @@ npm run cli system init
 npm run cli:emulator system init
 ```
 
+### 会社管理
+
+#### 会社情報の表示
+
+```bash
+# 会社情報を表示
+npm run cli companies info company-id-123
+npm run cli:emulator companies info company-id-123
+
+# 直接実行
+node src/cli.js companies info company-id-123
+node src/cli.js --env emulator companies info company-id-123
+```
+
 ## 🔧 環境設定
 
 ### 本番環境
@@ -292,4 +315,21 @@ npm run cli:emulator users get-uid test@example.com
 npm run cli:emulator claims set-superuser test-uid-123
 npm run cli:emulator users view test-uid-123
 npm run cli:emulator system maintenance-toggle
+```
+
+### Dev 環境の会社データリセット
+
+```bash
+# エミュレーター環境で会社データを完全リセット
+# 1. 会社情報を確認
+npm run cli:emulator companies info company-dev-123
+
+# 2. ユーザー一覧を確認
+npm run cli:emulator companies users company-dev-123
+
+# 3. 会社データを削除（確認あり）
+npm run cli:emulator companies delete company-dev-123
+
+# または強制削除（確認スキップ）
+npm run cli:emulator companies delete company-dev-123 --force
 ```
