@@ -101,12 +101,26 @@ class AirGuardAdminSDK {
     });
   }
 
+  async backupAllCompanies(outputDir) {
+    return await backupCommands.backupAllCompanies({
+      ...this.options,
+      output: outputDir,
+    });
+  }
+
   async listBackups(companyId) {
     return await backupCommands.listBackups(companyId, this.options);
   }
 
   async restoreCompany(backupFile) {
     return await backupCommands.restoreCompany(backupFile, this.options);
+  }
+
+  async restoreAllCompanies(timestamp, outputDir) {
+    return await backupCommands.restoreAllCompanies(timestamp, {
+      ...this.options,
+      output: outputDir,
+    });
   }
 }
 
@@ -144,7 +158,9 @@ module.exports = {
 
   backup: {
     backupCompany: backupCommands.backupCompany,
+    backupAllCompanies: backupCommands.backupAllCompanies,
     restoreCompany: backupCommands.restoreCompany,
+    restoreAllCompanies: backupCommands.restoreAllCompanies,
     listBackups: backupCommands.listBackups,
   },
 };

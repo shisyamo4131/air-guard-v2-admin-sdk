@@ -223,7 +223,8 @@ async function collectCompanyData(companyId) {
 async function backupCompany(companyId, options = {}) {
   try {
     const outputDir = options.output || DEFAULT_BACKUP_DIR;
-    const timestamp = getJSTTimestamp();
+    // タイムスタンプがオプションで指定されていればそれを使用、なければ新規生成
+    const timestamp = options.timestamp || getJSTTimestamp();
     const filename = `backup_${timestamp}.json`;
     const companyBackupDir = path.join(outputDir, "companies", companyId);
     const filepath = path.join(companyBackupDir, filename);
@@ -265,6 +266,113 @@ async function backupCompany(companyId, options = {}) {
     };
   } catch (error) {
     console.error("\n❌ バックアップ中にエラーが発生しました:");
+    console.error(error.message);
+    throw error;
+  }
+}
+
+/**
+ * 全会社のバックアップを取得
+ */
+async function backupAllCompanies(options = {}) {
+  try {
+    const db = admin.firestore();
+    const outputDir = options.output || DEFAULT_BACKUP_DIR;
+    // 全会社で統一されたタイムスタンプを生成
+    const timestamp = getJSTTimestamp();
+
+    console.log("\n🔧 全会社のバックアップを開始します");
+    console.log(`📅 バックアップタイムスタンプ: ${timestamp}`);
+
+    // 全会社を取得
+    console.log("\n📋 会社一覧を取得中...");
+    const companiesSnapshot = await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .get();
+
+    if (companiesSnapshot.empty) {
+      console.log("⚠️  会社が見つかりませんでした。");
+      return {
+        success: true,
+        totalCompanies: 0,
+        successCount: 0,
+        failedCompanies: [],
+        timestamp: timestamp,
+      };
+    }
+
+    console.log(`📊 ${companiesSnapshot.size} 社の会社が見つかりました。\n`);
+
+    const results = {
+      success: true,
+      totalCompanies: companiesSnapshot.size,
+      successCount: 0,
+      failedCompanies: [],
+      backups: [],
+      timestamp: timestamp,
+    };
+
+    // 各会社をバックアップ
+    for (const doc of companiesSnapshot.docs) {
+      const companyId = doc.id;
+      const companyData = doc.data();
+      const companyName = companyData.companyName || "名称未設定";
+
+      console.log(
+        `\n📦 [${results.successCount + 1}/${
+          companiesSnapshot.size
+        }] ${companyName} (${companyId})`
+      );
+      console.log("─".repeat(60));
+
+      try {
+        // 統一タイムスタンプを渡す
+        const result = await backupCompany(companyId, {
+          ...options,
+          timestamp,
+        });
+        results.successCount++;
+        results.backups.push({
+          companyId,
+          companyName,
+          filepath: result.filepath,
+          success: true,
+        });
+      } catch (error) {
+        console.error(
+          `❌ ${companyName} のバックアップに失敗: ${error.message}`
+        );
+        results.failedCompanies.push({
+          companyId,
+          companyName,
+          error: error.message,
+        });
+      }
+    }
+
+    // サマリー表示
+    console.log("\n" + "═".repeat(60));
+    console.log("✅ 全会社のバックアップが完了しました！");
+    console.log("═".repeat(60));
+    console.log(`\n📊 バックアップサマリー:`);
+    console.log(`  - バックアップタイムスタンプ: ${timestamp}`);
+    console.log(`  - 対象会社数: ${results.totalCompanies} 社`);
+    console.log(`  - 成功: ${results.successCount} 社`);
+    console.log(`  - 失敗: ${results.failedCompanies.length} 社`);
+    console.log(`  - 出力先: ${outputDir}/companies/`);
+
+    if (results.failedCompanies.length > 0) {
+      console.log(`\n⚠️  失敗した会社:`);
+      results.failedCompanies.forEach((failed) => {
+        console.log(
+          `  - ${failed.companyName} (${failed.companyId}): ${failed.error}`
+        );
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error("\n❌ 全会社バックアップ中にエラーが発生しました:");
     console.error(error.message);
     throw error;
   }
@@ -373,30 +481,57 @@ async function restoreCompany(backupFile, options = {}) {
 
     const db = admin.firestore();
 
-    // 0. 既存データの削除確認
-    console.log("\n⚠️  既存データの削除について:");
-    console.log(
-      "  リストアを実行すると、既存のデータは完全に置き換えられます。"
-    );
+    // 0. 既存データの削除確認（skipConfirmationオプションがfalseの場合のみ）
+    if (!options.skipConfirmation) {
+      // 環境判定（本番環境かどうか）
+      const isProd =
+        process.env.FIREBASE_ENV === "prod" || options.env === "prod";
 
-    const readline = require("readline").createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const shouldDelete = await new Promise((resolve) => {
-      readline.question(
-        `\n既存データを削除してリストアしますか？ (yes/no): `,
-        (answer) => {
-          readline.close();
-          resolve(answer.toLowerCase() === "yes");
-        }
+      console.log("\n⚠️  既存データの削除について:");
+      console.log(
+        "  リストアを実行すると、既存のデータは完全に置き換えられます。"
       );
-    });
 
-    if (!shouldDelete) {
-      console.log("\n❌ リストアをキャンセルしました。");
-      return;
+      const readline = require("readline").createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      // 1回目の確認
+      const shouldDelete = await new Promise((resolve) => {
+        readline.question(
+          `\n既存データを削除してリストアしますか？ (yes/no): `,
+          (answer) => {
+            resolve(answer.toLowerCase() === "yes");
+          }
+        );
+      });
+
+      if (!shouldDelete) {
+        readline.close();
+        console.log("\n❌ リストアをキャンセルしました。");
+        return;
+      }
+
+      // 本番環境の場合は2回目の確認
+      if (isProd) {
+        const shouldDeleteAgain = await new Promise((resolve) => {
+          readline.question(
+            `\n🚨 本番環境です！本当にリストアを実行しますか？この操作は取り消せません。 (yes/no): `,
+            (answer) => {
+              readline.close();
+              resolve(answer.toLowerCase() === "yes");
+            }
+          );
+        });
+
+        if (!shouldDeleteAgain) {
+          console.log("\n❌ リストアをキャンセルしました。");
+          return;
+        }
+      } else {
+        readline.close();
+      }
     }
 
     // 1. 既存のサブコレクションを削除（全て）
@@ -700,9 +835,211 @@ async function listBackups(companyId = null, options = {}) {
   }
 }
 
+/**
+ * 全会社を指定されたタイムスタンプからリストア
+ */
+async function restoreAllCompanies(timestamp, options = {}) {
+  try {
+    const outputDir = options.output || DEFAULT_BACKUP_DIR;
+    const companiesDir = path.join(outputDir, "companies");
+
+    console.log("\n🔧 全会社のリストアを開始します");
+    console.log(`📅 対象タイムスタンプ: ${timestamp}`);
+
+    // companiesディレクトリの存在確認
+    try {
+      await fs.access(companiesDir);
+    } catch {
+      console.error(
+        `❌ バックアップディレクトリが見つかりません: ${companiesDir}`
+      );
+      return {
+        success: false,
+        error: "backup-directory-not-found",
+      };
+    }
+
+    // 全会社ディレクトリを取得
+    console.log("\n📋 バックアップ対象の会社を検索中...");
+    const companyDirs = await fs.readdir(companiesDir);
+
+    if (companyDirs.length === 0) {
+      console.log("⚠️  バックアップが見つかりませんでした。");
+      return {
+        success: true,
+        totalCompanies: 0,
+        successCount: 0,
+        failedCompanies: [],
+        skippedCompanies: [],
+      };
+    }
+
+    // 指定タイムスタンプのバックアップファイルを検索
+    const targetFilename = `backup_${timestamp}.json`;
+    const companiesToRestore = [];
+
+    for (const companyId of companyDirs) {
+      const backupFilePath = path.join(companiesDir, companyId, targetFilename);
+      try {
+        await fs.access(backupFilePath);
+        companiesToRestore.push({
+          companyId,
+          backupFilePath,
+        });
+      } catch {
+        // このタイムスタンプのバックアップが存在しない会社はスキップ
+      }
+    }
+
+    if (companiesToRestore.length === 0) {
+      console.error(
+        `❌ タイムスタンプ ${timestamp} のバックアップが見つかりませんでした。`
+      );
+      return {
+        success: false,
+        error: "no-backups-found",
+        timestamp: timestamp,
+      };
+    }
+
+    console.log(
+      `📊 ${companiesToRestore.length} 社のバックアップが見つかりました。\n`
+    );
+
+    // 環境判定（本番環境かどうか）
+    const isProd =
+      process.env.FIREBASE_ENV === "prod" || options.env === "prod";
+
+    // 確認プロンプト（本番環境では2回）
+    const readline = require("readline").createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    // 1回目の確認
+    const shouldRestore = await new Promise((resolve) => {
+      readline.question(
+        `⚠️  ${companiesToRestore.length} 社のデータをリストアしますか？既存データは全て削除されます。 (yes/no): `,
+        (answer) => {
+          resolve(answer.toLowerCase() === "yes");
+        }
+      );
+    });
+
+    if (!shouldRestore) {
+      readline.close();
+      console.log("\n❌ リストアをキャンセルしました。");
+      return {
+        success: false,
+        cancelled: true,
+      };
+    }
+
+    // 本番環境の場合は2回目の確認
+    if (isProd) {
+      const shouldRestoreAgain = await new Promise((resolve) => {
+        readline.question(
+          `\n🚨 本番環境です！本当にリストアを実行しますか？この操作は取り消せません。 (yes/no): `,
+          (answer) => {
+            readline.close();
+            resolve(answer.toLowerCase() === "yes");
+          }
+        );
+      });
+
+      if (!shouldRestoreAgain) {
+        console.log("\n❌ リストアをキャンセルしました。");
+        return {
+          success: false,
+          cancelled: true,
+        };
+      }
+    } else {
+      readline.close();
+    }
+
+    const results = {
+      success: true,
+      timestamp: timestamp,
+      totalCompanies: companiesToRestore.length,
+      successCount: 0,
+      failedCompanies: [],
+      restoredCompanies: [],
+    };
+
+    // 各会社をリストア（確認プロンプトをスキップ）
+    for (let i = 0; i < companiesToRestore.length; i++) {
+      const { companyId, backupFilePath } = companiesToRestore[i];
+
+      // バックアップファイルから会社名を取得
+      let companyName = companyId;
+      try {
+        const content = await fs.readFile(backupFilePath, "utf-8");
+        const data = JSON.parse(content);
+        companyName = data.company.companyName || companyId;
+      } catch {}
+
+      console.log(
+        `\n📦 [${i + 1}/${
+          companiesToRestore.length
+        }] ${companyName} (${companyId})`
+      );
+      console.log("─".repeat(60));
+
+      try {
+        // skipConfirmationオプションを追加して個別確認をスキップ
+        const result = await restoreCompany(backupFilePath, {
+          ...options,
+          skipConfirmation: true,
+        });
+        results.successCount++;
+        results.restoredCompanies.push({
+          companyId,
+          companyName,
+          success: true,
+        });
+      } catch (error) {
+        console.error(`❌ ${companyName} のリストアに失敗: ${error.message}`);
+        results.failedCompanies.push({
+          companyId,
+          companyName,
+          error: error.message,
+        });
+      }
+    }
+
+    // サマリー表示
+    console.log("\n" + "═".repeat(60));
+    console.log("✅ 全会社のリストアが完了しました！");
+    console.log("═".repeat(60));
+    console.log(`\n📊 リストアサマリー:`);
+    console.log(`  - タイムスタンプ: ${timestamp}`);
+    console.log(`  - 対象会社数: ${results.totalCompanies} 社`);
+    console.log(`  - 成功: ${results.successCount} 社`);
+    console.log(`  - 失敗: ${results.failedCompanies.length} 社`);
+
+    if (results.failedCompanies.length > 0) {
+      console.log(`\n⚠️  失敗した会社:`);
+      results.failedCompanies.forEach((failed) => {
+        console.log(
+          `  - ${failed.companyName} (${failed.companyId}): ${failed.error}`
+        );
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error("\n❌ 全会社リストア中にエラーが発生しました:");
+    console.error(error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   backupCompany,
+  backupAllCompanies,
   restoreCompany,
   restoreCompanyInteractive,
+  restoreAllCompanies,
   listBackups,
 };

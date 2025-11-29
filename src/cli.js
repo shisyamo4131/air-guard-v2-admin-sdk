@@ -237,6 +237,18 @@ backupCmd
   });
 
 backupCmd
+  .command("all")
+  .description("全会社のデータをバックアップ")
+  .option("-o, --output <dir>", "出力ディレクトリ", "./backups")
+  .action(async (cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await backupCommands.backupAllCompanies({
+      ...globalOpts,
+      output: cmdOptions.output,
+    });
+  });
+
+backupCmd
   .command("restore <companyId>")
   .description("バックアップからリストア")
   .option(
@@ -252,6 +264,18 @@ backupCmd
       // ファイルパス未指定時はインタラクティブ選択
       await backupCommands.restoreCompanyInteractive(companyId, globalOpts);
     }
+  });
+
+backupCmd
+  .command("restore-all <timestamp>")
+  .description("指定タイムスタンプから全会社をリストア")
+  .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
+  .action(async (timestamp, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await backupCommands.restoreAllCompanies(timestamp, {
+      ...globalOpts,
+      output: cmdOptions.output,
+    });
   });
 
 backupCmd

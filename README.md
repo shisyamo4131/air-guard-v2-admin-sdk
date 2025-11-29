@@ -168,9 +168,16 @@ npm run cli:emulator companies delete <companyId> --force  # 確認スキップ
 #### 💾 バックアップ・リストア（⭐ NEW）
 
 ```bash
+# 個別会社のバックアップ・リストア
 npm run cli:emulator backup company <companyId>    # 会社データをバックアップ
 npm run cli:emulator backup restore <companyId>    # インタラクティブリストア
 npm run cli:emulator backup restore <companyId> -f <file>  # ファイル指定リストア
+
+# 全会社のバックアップ・リストア（統一タイムスタンプ）
+npm run cli:emulator backup all                    # 全会社をバックアップ（同じタイムスタンプ）
+npm run cli:emulator backup restore-all <timestamp> # 指定タイムスタンプで全会社をリストア
+
+# バックアップ一覧
 npm run cli:emulator backup list                   # 全バックアップ一覧
 npm run cli:emulator backup list <companyId>       # 会社のバックアップ一覧
 ```
@@ -207,11 +214,17 @@ async function example() {
     await sdk.deleteCompany("company-id-123");
 
     // バックアップ・リストア（✅ 全て実装済み）
+    // 個別会社
     await sdk.backupCompany("company-id-123");
     await sdk.restoreCompany(
       "./backups/companies/company-id-123/backup_2025-11-29_15-17-21.json"
     );
     await sdk.listBackups("company-id-123");
+
+    // 全会社（統一タイムスタンプ）
+    const result = await sdk.backupAllCompanies();
+    console.log(result.timestamp); // 2025-11-29_16-54-10
+    await sdk.restoreAllCompanies("2025-11-29_16-54-10");
 
     // 環境切り替え
     sdk.setEnvironment("dev");
@@ -246,13 +259,18 @@ async function example() {
     await companies.getCompanyInfo("company-id-123", options);
     await companies.deleteCompany("company-id-123", options);
 
-    // バックアップ・リストア（✅ 全て実装済み）
+    // バックアップ・リストア（✅ 全て実装済まで）
+    // 個別会社
     await backup.backupCompany("company-id-123", options);
     await backup.restoreCompany(
       "./backups/companies/company-id-123/backup_2025-11-29_15-17-21.json",
       options
     );
     await backup.listBackups("company-id-123", options);
+
+    // 全会社（統一タイムスタンプ）
+    await backup.backupAllCompanies(options);
+    await backup.restoreAllCompanies("2025-11-29_16-54-10", options);
   } catch (error) {
     console.error("Error:", error.message);
   }
@@ -264,6 +282,13 @@ async function example() {
 #### 概要
 
 会社データ（Firestore ドキュメント + Authentication ユーザー）を完全にバックアップし、後から復元できます。
+
+**主要機能:**
+
+- 個別会社のバックアップ・リストア
+- **全会社の一括バックアップ（統一タイムスタンプ）**
+- **指定タイムスタンプで全会社を一括リストア**
+- 本番環境では 2 回確認プロンプトで安全性向上
 
 #### バックアップ対象
 
@@ -287,26 +312,31 @@ Authentication ユーザー: メタデータ、カスタムクレーム
 ##### 使用例
 
 ```bash
-# バックアップ作成
+# 個別会社のバックアップ作成
 npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m
 
-# インタラクティブリストア（ファイル選択）
+# 全会社のバックアップ（統一タイムスタンプ）
+npm run cli:emulator backup all
+
+# インタラクティブリストア（個別会社）
 npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m
 
-# ファイル指定リストア
-npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m -f ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
+# 全会社を指定タイムスタンプからリストア
+npm run cli:emulator backup restore-all 2025-11-29_16-54-10
 
 # バックアップ一覧
 npm run cli:emulator backup list
 npm run cli:emulator backup list Qa1JpI7dLMjIXeW3lB2m
 ```
 
-##### 従業な注意事項
+##### 重要な注意事項
 
-- データの完全置換: バックアップ取得後に追加したデータもリストア時に削除される
-- 仮パスワード: リストアした Authentication ユーザーには仮パスワードが設定される
-- UID 保持: 元の UID が保持されるため、データの参照関係は維持される
-- タイムスタンプ: JST（日本標準時）でファイル名が生成される
+- **データの完全置換**: バックアップ取得後に追加したデータもリストア時に削除される
+- **仮パスワード**: リストアした Authentication ユーザーには仮パスワードが設定される
+- **UID 保持**: 元の UID が保持されるため、データの参照関係は維持される
+- **統一タイムスタンプ**: `backup all` コマンドでは全会社で同じタイムスタンプが使用される
+- **確認プロンプト**: 全会社リストアでは最初に 1 回のみ確認（本番環境では 2 回）
+- **タイムスタンプ形式**: JST（日本標準時）で `YYYY-MM-DD_HH-MM-SS` 形式
 
 ## 🐛 トラブルシューティング
 

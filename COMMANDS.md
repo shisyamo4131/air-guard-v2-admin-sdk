@@ -42,15 +42,19 @@
 
 ### 💾 バックアップ・リストア (Backup)（⭐ NEW）
 
-| コマンド                     | 説明                                                    | 引数                                   | 実装状況    |
-| ---------------------------- | ------------------------------------------------------- | -------------------------------------- | ----------- |
-| `backup company <companyId>` | 会社データをバックアップ                                | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                              | オプション: `-o, --output` 出力先指定                   |                                        |             |
-| `backup restore <companyId>` | インタラクティブリストア（ファイル選択）                | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                              | オプション: `-f, --file` ファイル指定                   |                                        |             |
-|                              | オプション: `-o, --output` バックアップディレクトリ指定 |                                        |             |
-| `backup list [companyId]`    | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社） | ✅ 実装済み |
-|                              | オプション: `-o, --output` バックアップディレクトリ指定 |                                        |             |
+| コマンド                         | 説明                                                    | 引数                                    | 実装状況    |
+| -------------------------------- | ------------------------------------------------------- | --------------------------------------- | ----------- |
+| `backup company <companyId>`     | 会社データをバックアップ                                | `companyId`: 会社 ID                    | ✅ 実装済み |
+|                                  | オプション: `-o, --output` 出力先指定                   |                                         |             |
+| `backup all`                     | 全会社のデータをバックアップ（統一タイムスタンプ）      | なし                                    | ✅ 実装済み |
+|                                  | オプション: `-o, --output` 出力先指定                   |                                         |             |
+| `backup restore <companyId>`     | インタラクティブリストア（ファイル選択）                | `companyId`: 会社 ID                    | ✅ 実装済み |
+|                                  | オプション: `-f, --file` ファイル指定                   |                                         |             |
+|                                  | オプション: `-o, --output` バックアップディレクトリ指定 |                                         |             |
+| `backup restore-all <timestamp>` | 全会社を指定タイムスタンプからリストア                  | `timestamp`: バックアップタイムスタンプ | ✅ 実装済み |
+|                                  | オプション: `-o, --output` バックアップディレクトリ指定 |                                         |             |
+| `backup list [companyId]`        | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社）  | ✅ 実装済み |
+|                                  | オプション: `-o, --output` バックアップディレクトリ指定 |                                         |             |
 
 ## 🌟 基本的な使用方法
 
@@ -269,6 +273,8 @@ npm run cli:emulator companies delete company-id-123 --force
 
 #### バックアップ・リストア
 
+##### 個別会社のバックアップ
+
 ```bash
 # 会社データをバックアップ
 npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m
@@ -278,7 +284,18 @@ npm run cli:dev backup company Qa1JpI7dLMjIXeW3lB2m
 npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m -o ./custom-backups
 ```
 
-##### 出力例
+##### 全会社のバックアップ（統一タイムスタンプ）
+
+```bash
+# 全会社のデータをバックアップ（全会社で同じタイムスタンプ）
+npm run cli:emulator backup all
+npm run cli:dev backup all
+
+# 出力先を指定
+npm run cli:emulator backup all -o ./custom-backups
+```
+
+##### 出力例（個別会社）
 
 🔧 バックアップを開始します
 📂 出力先: ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
@@ -308,7 +325,7 @@ npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m -o ./custom-backups
 - Authentication ユーザー数: 2
 - コレクション数: 6
 
-#### インタラクティブリストア
+#### インタラクティブリストア（個別会社）
 
 ```bash
 # バックアップファイルを選択してリストア
@@ -641,6 +658,51 @@ npm run cli:dev companies delete some-data
 # 3. 問題があればリストアで復旧
 
 npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m -f ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
+
+#### 全会社の一括リストア
+
+```bash
+# 指定タイムスタンプで全会社をリストア
+npm run cli:emulator backup restore-all 2025-11-29_16-54-10
+npm run cli:dev backup restore-all 2025-11-29_16-54-10
+
+# カスタムディレクトリから
+npm run cli:emulator backup restore-all 2025-11-29_16-54-10 -o ./custom-backups
+```
+
+**重要な注意事項:**
+
+- 最初に 1 回確認プロンプトが表示されます
+- 本番環境（prod）では安全のため 2 回確認が表示されます
+- 各会社ごとの個別確認はスキップされます
+- 既存データは全て削除されます
+
+##### 出力例
+
+```
+🔧 全会社のリストアを開始します
+📅 対象タイムスタンプ: 2025-11-29_16-54-10
+
+📋 バックアップ対象の会社を検索中...
+📊 2 社のバックアップが見つかりました。
+
+⚠️  2 社のデータをリストアしますか？既存データは全て削除されます。 (yes/no): yes
+
+📦 [1/2] 株式会社テスト (PRJK9JTHbMX52JNoFHtD)
+────────────────────────────────────────────────────────────
+[リストア処理...]
+
+📦 [2/2] 株式会社唯心 (Qa1JpI7dLMjIXeW3lB2m)
+────────────────────────────────────────────────────────────
+[リストア処理...]
+
+✅ 全会社のリストアが完了しました！
+📊 リストアサマリー:
+  - タイムスタンプ: 2025-11-29_16-54-10
+  - 対象会社数: 2 社
+  - 成功: 2 社
+  - 失敗: 0 社
+```
 
 #### Emulator 環境でのテスト復旧
 
