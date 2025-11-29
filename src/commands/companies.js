@@ -4,6 +4,10 @@
  */
 
 const admin = require("../firebaseAdmin");
+const {
+  COMPANY_SUBCOLLECTIONS,
+  TOP_LEVEL_COLLECTIONS,
+} = require("../constants/collections");
 
 /**
  * 会社情報を取得して表示
@@ -13,7 +17,10 @@ async function getCompanyInfo(companyId, options = {}) {
     console.log(`\n📋 会社情報を取得しています... (ID: ${companyId})`);
 
     const db = admin.firestore();
-    const companyDoc = await db.collection("Companies").doc(companyId).get();
+    const companyDoc = await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
+      .get();
 
     if (!companyDoc.exists) {
       console.log(`⚠️  会社ID ${companyId} が見つかりません。`);
@@ -61,7 +68,7 @@ async function listCompanyUsers(companyId, options = {}) {
 
     // Firestoreから会社のユーザードキュメントを取得
     const usersSnapshot = await db
-      .collection(`Companies/${companyId}/Users`)
+      .collection(`${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/Users`)
       .get();
 
     if (usersSnapshot.empty) {
@@ -162,27 +169,10 @@ async function deleteCompany(companyId, options = {}) {
     // 4. Firestoreサブコレクションを削除
     console.log("\n🗑️  Firestoreサブコレクションを削除しています...");
 
-    const subCollections = [
-      "ArrangementNotifications",
-      "Autonumbers",
-      "Billings",
-      "Customers",
-      "Customers_archive",
-      "Employees",
-      "Employees_archive",
-      "meta",
-      "OperationResults",
-      "Outsourcers",
-      "Outsourcers_archive",
-      "Sites",
-      "Sites_archive",
-      "SiteOperationSchedules",
-      "Users",
-    ];
-
-    for (const collectionName of subCollections) {
+    // 定数ファイルからサブコレクションリストを取得
+    for (const collectionName of COMPANY_SUBCOLLECTIONS) {
       const collectionRef = db.collection(
-        `Companies/${companyId}/${collectionName}`
+        `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
       );
       const snapshot = await collectionRef.get();
 
@@ -220,20 +210,25 @@ async function deleteCompany(companyId, options = {}) {
 
     // 5. 会社ドキュメント本体を削除
     console.log("\n🗑️  会社ドキュメントを削除しています...");
-    await db.collection("Companies").doc(companyId).delete();
+    await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
+      .delete();
     console.log("  ✅ 会社ドキュメント削除完了");
 
     console.log("\n✅ 会社データの一括削除が完了しました。");
     console.log(`📊 削除サマリー:`);
     console.log(`  - 会社ID: ${companyId}`);
     console.log(`  - 削除ユーザー数: ${users.length} 名`);
-    console.log(`  - 削除サブコレクション数: ${subCollections.length} 種類`);
+    console.log(
+      `  - 削除サブコレクション数: ${COMPANY_SUBCOLLECTIONS.length} 種類`
+    );
 
     return {
       success: true,
       companyId,
       deletedUsers: users.length,
-      deletedCollections: subCollections.length,
+      deletedCollections: COMPANY_SUBCOLLECTIONS.length,
     };
   } catch (error) {
     console.error("\n❌ 会社データ削除中にエラーが発生しました:");

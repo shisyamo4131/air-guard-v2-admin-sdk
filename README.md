@@ -303,6 +303,21 @@ npm run cli:prod <command>
 3. `src/index.js` にプログラマティック API を追加
 4. `COMMANDS.md` にドキュメントを追加
 
+### サブコレクション追加の手順
+
+会社に新しいサブコレクション（`Companies/{companyId}/NewCollection`）を追加する場合：
+
+1. **定数ファイルの更新**: `src/constants/collections.js` の `COMPANY_SUBCOLLECTIONS` 配列に追加
+
+   ```javascript
+   const COMPANY_SUBCOLLECTIONS = [
+     "ArrangementNotifications",
+     "Autonumbers",
+     // ... 既存のコレクション
+     "NewCollection", // 新しいコレクションを追加
+   ];
+   ```
+
 ### テスト
 
 ```bash
