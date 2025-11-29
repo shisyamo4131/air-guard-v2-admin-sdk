@@ -7,6 +7,7 @@ const usersCommands = require("./commands/users");
 const claimsCommands = require("./commands/claims");
 const systemCommands = require("./commands/system");
 const companiesCommands = require("./commands/companies");
+const backupCommands = require("./commands/backup");
 
 /**
  * AirGuard Admin SDK メインクラス
@@ -91,6 +92,22 @@ class AirGuardAdminSDK {
   async deleteCompany(companyId) {
     return await companiesCommands.deleteCompany(companyId, this.options);
   }
+
+  // Backup commands
+  async backupCompany(companyId, outputDir) {
+    return await backupCommands.backupCompany(companyId, {
+      ...this.options,
+      output: outputDir,
+    });
+  }
+
+  async listBackups(companyId) {
+    return await backupCommands.listBackups(companyId, this.options);
+  }
+
+  async restoreCompany(backupFile) {
+    return await backupCommands.restoreCompany(backupFile, this.options);
+  }
 }
 
 // 直接関数エクスポート（旧バージョン互換）
@@ -123,6 +140,12 @@ module.exports = {
     getCompanyInfo: companiesCommands.getCompanyInfo,
     listCompanyUsers: companiesCommands.listCompanyUsers,
     deleteCompany: companiesCommands.deleteCompany,
+  },
+
+  backup: {
+    backupCompany: backupCommands.backupCompany,
+    restoreCompany: backupCommands.restoreCompany,
+    listBackups: backupCommands.listBackups,
   },
 };
 

@@ -17,7 +17,6 @@ const COMPANY_SUBCOLLECTIONS = [
   "Customers_archive",
   "Employees",
   "Employees_archive",
-  "meta",
   "OperationResults",
   "Outsourcers",
   "Outsourcers_archive",

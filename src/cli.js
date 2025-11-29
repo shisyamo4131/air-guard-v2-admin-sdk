@@ -3,7 +3,7 @@
  * 統一されたコマンドラインインターフェース
  */
 
-const { program } = require("commander");
+const { program, Command } = require("commander");
 const package = require("../package.json");
 
 // 早期の環境変数設定
@@ -37,6 +37,7 @@ const usersCommands = require("./commands/users");
 const claimsCommands = require("./commands/claims");
 const systemCommands = require("./commands/system");
 const companiesCommands = require("./commands/companies");
+const backupCommands = require("./commands/backup");
 
 // プログラムの基本設定
 program
@@ -218,6 +219,53 @@ companiesCmd
     await companiesCommands.deleteCompany(companyId, globalOpts);
   });
 
+// backup サブコマンド
+const backupCmd = program
+  .command("backup")
+  .description("バックアップ・リストア管理");
+
+backupCmd
+  .command("company <companyId>")
+  .description("会社データをバックアップ")
+  .option("-o, --output <dir>", "出力ディレクトリ", "./backups")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await backupCommands.backupCompany(companyId, {
+      ...globalOpts,
+      output: cmdOptions.output,
+    });
+  });
+
+backupCmd
+  .command("restore <companyId>")
+  .description("バックアップからリストア")
+  .option(
+    "-f, --file <backupFile>",
+    "バックアップファイルのパス（省略時は選択）"
+  )
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    if (cmdOptions.file) {
+      // ファイルパス指定時は直接リストア
+      await backupCommands.restoreCompany(cmdOptions.file, globalOpts);
+    } else {
+      // ファイルパス未指定時はインタラクティブ選択
+      await backupCommands.restoreCompanyInteractive(companyId, globalOpts);
+    }
+  });
+
+backupCmd
+  .command("list [companyId]")
+  .description("バックアップ一覧を表示")
+  .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await backupCommands.listBackups(companyId, {
+      ...globalOpts,
+      output: cmdOptions.output,
+    });
+  });
+
 // ヘルプの改善
 program.on("--help", () => {
   console.log("");
@@ -243,7 +291,7 @@ program.on("--help", () => {
 
 // エラーハンドリング
 process.on("unhandledRejection", (error) => {
-  console.error(" Unhandled promise rejection:", error.message);
+  console.error("❌ Unhandled promise rejection:", error.message);
   process.exit(1);
 });
 
