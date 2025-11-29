@@ -4,14 +4,14 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 
 ## 🚀 機能
 
-- **ユーザー管理**: スーパーユーザーのリスト表示、ユーザークレーム表示、メールアドレスから UID 取得
-- **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除
-- **システム管理**: メンテナンスモードの制御、システム設定管理
-- **会社管理**: 会社情報表示、ユーザー一覧、会社データ一括削除
-- **バックアップ・リストア**: 会社データの完全バックアップと復元（⭐ NEW）
-- **環境対応**: Emulator・Dev・Prod 環境の切り替え対応
-- **CLI**: 統一されたコマンドラインインターフェース
-- **プログラマティック API**: 他のプロジェクトから直接使用可能
+- **ユーザー管理**: メールアドレスから UID 取得 ✅（一覧表示・クレーム表示は 🚧 未実装）
+- **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除（🚧 未実装）
+- **システム管理**: メンテナンスモードの制御、システム設定管理 ✅
+- **会社管理**: 会社情報表示、ユーザー一覧、会社データ一括削除 ✅
+- **バックアップ・リストア**: 会社データの完全バックアップと復元 ✅（⭐ NEW）
+- **環境対応**: Emulator・Dev・Prod 環境の切り替え対応 ✅
+- **CLI**: 統一されたコマンドラインインターフェース ✅
+- **プログラマティック API**: 他のプロジェクトから直接使用可能 ✅
 
 ## 📁 プロジェクト構造
 
@@ -103,10 +103,10 @@ Prod: FIREBASE_ENV=prod（将来実装）
 # ヘルプを表示
 npm run cli -- --help
 
-# 環境を指定してコマンド実行
-npm run cli:emulator users list    # Emulator環境（安全）
-npm run cli:dev users list          # Dev環境
-npm run cli:prod users list         # Prod環境（将来実装）
+# 環境を指定してコマンド実行（実装済みコマンド例）
+npm run cli:emulator users get-uid test@example.com    # Emulator環境（安全）
+npm run cli:dev system status                          # Dev環境
+npm run cli:prod system status                         # Prod環境（将来実装）
 ```
 
 ```bash
@@ -132,18 +132,18 @@ node src/cli.js users list  # デフォルトはDev環境
 #### 👥 ユーザー管理
 
 ```bash
-npm run cli:emulator users list                    # スーパーユーザー一覧
-npm run cli:emulator users view <uid>              # ユーザー情報表示
-npm run cli:emulator users get-uid <email>         # メールからUID取得
+# npm run cli:emulator users list                    # 🚧 未実装
+# npm run cli:emulator users view <uid>              # 🚧 未実装
+npm run cli:emulator users get-uid <email>         # ✅ メールからUID取得
 ```
 
-#### 🏷️ クレーム管理
+#### 🏷️ クレーム管理（🚧 全て未実装）
 
 ```bash
-npm run cli:emulator claims set-superuser <uid>    # スーパーユーザー設定
-npm run cli:emulator claims remove-superuser <uid> # スーパーユーザー削除
-npm run cli:emulator claims set-developer <uid>    # デベロッパー設定
-npm run cli:emulator claims remove-developer <uid> # デベロッパー削除
+# npm run cli:emulator claims set-superuser <uid>    # 🚧 未実装
+# npm run cli:emulator claims remove-superuser <uid> # 🚧 未実装
+# npm run cli:emulator claims set-developer <uid>    # 🚧 未実装
+# npm run cli:emulator claims remove-developer <uid> # 🚧 未実装
 ```
 
 #### ⚙️ システム管理
@@ -189,33 +189,33 @@ const sdk = new AirGuardAdminSDK({ env: "emulator" });
 async function example() {
   try {
     // ユーザー管理
-    await sdk.listSuperUsers();
-    await sdk.viewUserClaims("user-uid");
-    await sdk.getUidByEmail("user@example.com");
+    // await sdk.listSuperUsers(); // 🚧 未実装
+    // await sdk.viewUserClaims("user-uid"); // 🚧 未実装
+    await sdk.getUidByEmail("user@example.com"); // ✅ 実装済み
 
-    // クレーム管理
-    await sdk.setSuperUserClaim("user@example.com");
-    await sdk.setDeveloperClaim("user-uid");
+    // クレーム管理（🚧 全て未実装）
+    // await sdk.setSuperUserClaim("user@example.com");
+    // await sdk.setDeveloperClaim("user-uid");
 
-    // システム管理
+    // システム管理（✅ 全て実装済み）
     await sdk.getMaintenanceStatus();
     await sdk.enableMaintenance();
 
-    // 会社管理
+    // 会社管理（✅ 全て実装済み）
     await sdk.getCompanyInfo("company-id-123");
     await sdk.listCompanyUsers("company-id-123");
     await sdk.deleteCompany("company-id-123");
 
-    // バックアップ・リストア（⭐ NEW）
+    // バックアップ・リストア（✅ 全て実装済み）
     await sdk.backupCompany("company-id-123");
     await sdk.restoreCompany(
       "./backups/companies/company-id-123/backup_2025-11-29_15-17-21.json"
     );
-    await sdk.restoreCompanyInteractive("company-id-123");
+    await sdk.listBackups("company-id-123");
 
     // 環境切り替え
     sdk.setEnvironment("dev");
-    await sdk.listSuperUsers();
+    // await sdk.listSuperUsers(); // 🚧 未実装
   } catch (error) {
     console.error("Error:", error.message);
   }
@@ -232,20 +232,21 @@ async function example() {
 
   try {
     // ユーザー管理
-    await users.listSuperUsers(options);
-    await users.getUidByEmail("user@example.com", options);
+    // await users.listSuperUsers(options); // 🚧 未実装
+    await users.getUidByEmail("user@example.com", options); // ✅ 実装済み
 
-    // クレーム管理
-    await claims.setSuperUserClaim("user-uid", options);
+    // クレーム管理（🚧 全て未実装）
+    // await claims.setSuperUserClaim("user-uid", options);
 
-    // システム管理
+    // システム管理（✅ 全て実装済み）
     await system.enableMaintenance(options);
+    await system.getMaintenanceStatus(options);
 
-    // 会社管理
+    // 会社管理（✅ 全て実装済み）
     await companies.getCompanyInfo("company-id-123", options);
     await companies.deleteCompany("company-id-123", options);
 
-    // バックアップ・リストア（⭐ NEW）
+    // バックアップ・リストア（✅ 全て実装済み）
     await backup.backupCompany("company-id-123", options);
     await backup.restoreCompany(
       "./backups/companies/company-id-123/backup_2025-11-29_15-17-21.json",
@@ -427,17 +428,18 @@ npm run cli:prod <command>
 npm run cli -- --help
 
 # Emulator環境でのテスト（推奨 - 安全）
-npm run cli:emulator users list
-npm run cli:emulator system status
-npm run cli:emulator companies info <companyId>
+npm run cli:emulator users get-uid test@example.com  # ✅ 実装済み
+npm run cli:emulator system status                   # ✅ 実装済み
+npm run cli:emulator companies info <companyId>      # ✅ 実装済み
+npm run cli:emulator backup company <companyId>      # ✅ 実装済み
 
 # Dev環境でのテスト
-npm run cli:dev users list
-npm run cli:dev system status
+npm run cli:dev users get-uid user@example.com       # ✅ 実装済み
+npm run cli:dev system status                        # ✅ 実装済み
 
 # 本番環境テスト（注意して実行）
-npm run cli:prod users list
-npm run cli:prod system status
+# npm run cli:prod users get-uid user@example.com    # 将来実装
+# npm run cli:prod system status                     # 将来実装
 ```
 
 詳細なテスト手順とワークフローは **[COMMANDS.md](./COMMANDS.md)** をご覧ください。
