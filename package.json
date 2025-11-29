@@ -6,7 +6,13 @@
     "cli": "node src/cli.js",
     "cli:dev": "cross-env FIREBASE_ENV=dev node src/cli.js",
     "cli:prod": "cross-env FIREBASE_ENV=prod node src/cli.js",
-    "cli:emulator": "cross-env FIREBASE_ENV=dev node src/cli.js --env emulator"
+    "cli:emulator": "cross-env FIREBASE_ENV=dev node src/cli.js --env emulator",
+    "backup:local": "cross-env STORAGE_TYPE=local node src/cli.js backup",
+    "backup:firebase": "cross-env STORAGE_TYPE=firebase node src/cli.js backup",
+    "backup:local:dev": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=local node src/cli.js backup",
+    "backup:firebase:dev": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=firebase node src/cli.js backup",
+    "backup:local:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=local node src/cli.js --env emulator backup",
+    "backup:firebase:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=firebase node src/cli.js --env emulator backup"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +21,7 @@
   "dependencies": {
     "commander": "^14.0.1",
     "firebase-admin": "^13.3.0",
+    "glob": "^13.0.0",
     "inquirer": "^8.2.7"
   },
   "devDependencies": {

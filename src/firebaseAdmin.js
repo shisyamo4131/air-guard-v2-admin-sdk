@@ -48,15 +48,19 @@ function getServiceAccountPath() {
 function logConnectionInfo() {
   const authEmulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
+  const storageEmulatorHost = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
   const env = process.env.FIREBASE_ENV || process.env.NODE_ENV || "dev";
 
-  if (authEmulatorHost || firestoreEmulatorHost) {
+  if (authEmulatorHost || firestoreEmulatorHost || storageEmulatorHost) {
     console.log("🔌 Connecting to Firebase Emulator:");
     if (authEmulatorHost) {
       console.log(`   - AUTH: ${authEmulatorHost}`);
     }
     if (firestoreEmulatorHost) {
       console.log(`   - FIRESTORE: ${firestoreEmulatorHost}`);
+    }
+    if (storageEmulatorHost) {
+      console.log(`   - STORAGE: ${storageEmulatorHost}`);
     }
     console.log(`   - Service Account: Dev環境の秘密鍵使用`);
   } else {
@@ -77,11 +81,17 @@ if (admin.apps.length === 0) {
       const serviceAccount = require(serviceAccountPath);
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        storageBucket:
+          process.env.FIREBASE_STORAGE_BUCKET ||
+          "air-guard-v2-dev.firebasestorage.app",
       });
     } else {
       // Emulator環境：秘密鍵不要（ダミークレデンシャル）
       admin.initializeApp({
         projectId: "air-guard-v2-dev", // エミュレーター用のプロジェクトID
+        storageBucket:
+          process.env.FIREBASE_STORAGE_BUCKET ||
+          "air-guard-v2-dev.firebasestorage.app",
       });
     }
 

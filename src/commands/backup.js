@@ -11,8 +11,23 @@ const {
 const path = require("path");
 const fs = require("fs").promises;
 const inquirer = require("inquirer");
+const { createStorageAdapterFromEnv } = require("../storage");
 
 const DEFAULT_BACKUP_DIR = "./backups";
+
+/**
+ * ストレージタイプに応じたパスを生成
+ * Firebase Storageの場合: backups/companies/...
+ * Local Storageの場合: companies/... (basePathが./backupsのため)
+ */
+function getStoragePath(...pathSegments) {
+  const storageType = process.env.STORAGE_TYPE || "local";
+  const segments =
+    storageType === "firebase"
+      ? ["backups", ...pathSegments]
+      : [...pathSegments];
+  return path.join(...segments).replace(/\\/g, "/");
+}
 
 /**
  * 仮パスワードを生成
@@ -222,33 +237,56 @@ async function collectCompanyData(companyId) {
  */
 async function backupCompany(companyId, options = {}) {
   try {
+    // StorageAdapterを取得（環境変数から自動判定、またはオプション指定）
+    const storage = createStorageAdapterFromEnv(options.storage);
+
     const outputDir = options.output || DEFAULT_BACKUP_DIR;
     // タイムスタンプがオプションで指定されていればそれを使用、なければ新規生成
     const timestamp = options.timestamp || getJSTTimestamp();
     const filename = `backup_${timestamp}.json`;
-    const companyBackupDir = path.join(outputDir, "companies", companyId);
-    const filepath = path.join(companyBackupDir, filename);
+    const relativePath = getStoragePath("companies", companyId, filename);
 
     console.log(`\n🔧 バックアップを開始します`);
-    console.log(`📂 出力先: ${filepath}`);
+    console.log(`📂 出力先: ${relativePath}`);
 
     // バックアップデータ収集
     const backupData = await collectCompanyData(companyId);
 
-    // ディレクトリ作成
-    await fs.mkdir(companyBackupDir, { recursive: true });
+    // メタデータを準備
+    // 環境判定: EMULATOR > FIREBASE_ENV
+    let environment;
+    if (process.env.IS_EMULATOR === "true") {
+      environment = "EMULATOR";
+    } else if (process.env.FIREBASE_ENV === "prod") {
+      environment = "PROD";
+    } else if (process.env.FIREBASE_ENV === "dev") {
+      environment = "DEV";
+    } else {
+      environment = "UNKNOWN";
+    }
 
-    // JSONファイルに保存
+    const metadata = {
+      companyId: companyId,
+      companyName: backupData.company.companyName,
+      timestamp: timestamp,
+      totalDocuments: backupData.metadata.totalDocuments,
+      totalAuthUsers: backupData.metadata.totalAuthUsers,
+      collections: backupData.metadata.collections.join(","),
+      environment: environment, // EMULATOR, DEV, PROD
+    };
+
+    // StorageAdapterで保存
+    await storage.save(relativePath, backupData, metadata);
+
+    // ファイルサイズ計算（JSON文字列から概算）
     const jsonContent = JSON.stringify(backupData, null, 2);
-    await fs.writeFile(filepath, jsonContent, "utf-8");
-
-    // ファイルサイズ取得
-    const stats = await fs.stat(filepath);
-    const fileSizeKB = (stats.size / 1024).toFixed(2);
+    const fileSizeKB = (Buffer.byteLength(jsonContent, "utf8") / 1024).toFixed(
+      2
+    );
 
     console.log("\n✅ バックアップが完了しました！");
-    console.log(`📄 ファイル: ${filepath}`);
-    console.log(`📊 ファイルサイズ: ${fileSizeKB} KB`);
+    console.log(`📄 ファイル: ${relativePath}`);
+    console.log(`📊 ファイルサイズ: ${fileSizeKB} KB (概算)`);
     console.log(`\n📈 バックアップ統計:`);
     console.log(`  - 会社名: ${backupData.company.companyName}`);
     console.log(`  - 総ドキュメント数: ${backupData.metadata.totalDocuments}`);
@@ -261,7 +299,7 @@ async function backupCompany(companyId, options = {}) {
 
     return {
       success: true,
-      filepath: filepath,
+      filepath: relativePath,
       backupData: backupData,
     };
   } catch (error) {
@@ -383,44 +421,48 @@ async function backupAllCompanies(options = {}) {
  */
 async function restoreCompanyInteractive(companyId, options = {}) {
   try {
+    // StorageAdapterを取得
+    const storage = createStorageAdapterFromEnv(options.storage);
+
     const outputDir = options.output || DEFAULT_BACKUP_DIR;
-    const companyBackupDir = path.join(outputDir, "companies", companyId);
+    const companyPattern = getStoragePath(
+      "companies",
+      companyId,
+      "backup_*.json"
+    );
 
     console.log(`\n📋 会社 ${companyId} のバックアップを検索中...\n`);
 
-    // バックアップファイル一覧取得
-    try {
-      await fs.access(companyBackupDir);
-    } catch {
-      console.error(`❌ 会社 ${companyId} のバックアップが見つかりません。`);
-      return;
-    }
-
-    const files = await fs.readdir(companyBackupDir);
-    const backupFiles = files.filter(
-      (f) => f.startsWith("backup_") && f.endsWith(".json")
-    );
+    // バックアップファイル一覧取得（メタデータ込み）
+    const backupFiles = await storage.list(companyPattern, {
+      includeMetadata: true,
+    });
 
     if (backupFiles.length === 0) {
       console.error(`❌ 会社 ${companyId} のバックアップが見つかりません。`);
       return;
     }
 
-    // バックアップファイルの詳細情報を取得
+    // バックアップファイルの詳細情報を準備
     const choices = [];
-    for (const file of backupFiles.sort().reverse()) {
-      const filepath = path.join(companyBackupDir, file);
-      const content = await fs.readFile(filepath, "utf-8");
-      const data = JSON.parse(content);
+    for (const fileInfo of backupFiles.sort((a, b) =>
+      b.path.localeCompare(a.path)
+    )) {
+      let metadata = fileInfo.metadata;
+      const filename = path.basename(fileInfo.path);
+
+      // customMetadataがない場合（Storage Emulatorなど）、ファイルから取得
+      if (!metadata || !metadata.timestamp) {
+        const loaded = await storage.load(fileInfo.path);
+        metadata = loaded.metadata;
+      }
+
+      const displayInfo = `${filename} - ${metadata.timestamp} (${metadata.totalDocuments}ドキュメント, ${metadata.totalAuthUsers}ユーザー)`;
 
       choices.push({
-        name: `${file} - ${new Date(data.backupDate).toLocaleString(
-          "ja-JP"
-        )} (${data.metadata.totalDocuments}ドキュメント, ${
-          data.metadata.totalAuthUsers
-        }ユーザー)`,
-        value: filepath,
-        short: file,
+        name: displayInfo,
+        value: fileInfo.path,
+        short: filename,
       });
     }
 
@@ -460,13 +502,17 @@ async function restoreCompanyInteractive(companyId, options = {}) {
  */
 async function restoreCompany(backupFile, options = {}) {
   try {
+    // StorageAdapterを取得
+    const storage = createStorageAdapterFromEnv(options.storage);
+
     console.log(`\n🔧 リストアを開始します`);
     console.log(`📂 バックアップファイル: ${backupFile}`);
 
     // バックアップファイル読み込み
     console.log("\n📖 バックアップファイルを読み込んでいます...");
-    const content = await fs.readFile(backupFile, "utf-8");
-    const backupData = JSON.parse(content);
+    const loaded = await storage.load(backupFile);
+    const backupData = loaded.data;
+    const metadata = loaded.metadata;
 
     const { companyId, company, subCollections, authUsers } = backupData;
 
@@ -478,6 +524,47 @@ async function restoreCompany(backupFile, options = {}) {
         "ja-JP"
       )}`
     );
+
+    // 環境チェック
+    const currentEnv =
+      process.env.IS_EMULATOR === "true"
+        ? "EMULATOR"
+        : process.env.FIREBASE_ENV === "prod"
+        ? "PROD"
+        : process.env.FIREBASE_ENV === "dev"
+        ? "DEV"
+        : "UNKNOWN";
+
+    const backupEnv = metadata?.environment || "UNKNOWN";
+
+    if (currentEnv !== backupEnv && backupEnv !== "UNKNOWN") {
+      console.log(`\n⚠️  環境の不一致を検出:`);
+      console.log(`  - リストア先環境: ${currentEnv}`);
+      console.log(`  - バックアップ元環境: ${backupEnv}`);
+      console.log(`  ⚠️  異なる環境間でのリストアを実行しようとしています。`);
+
+      if (!options.skipConfirmation) {
+        const readline = require("readline").createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        const shouldContinue = await new Promise((resolve) => {
+          readline.question(
+            `\n異なる環境間でリストアを続行しますか？ (yes/no): `,
+            (answer) => {
+              readline.close();
+              resolve(answer.toLowerCase() === "yes");
+            }
+          );
+        });
+
+        if (!shouldContinue) {
+          console.log("\n❌ リストアをキャンセルしました。");
+          return;
+        }
+      }
+    }
 
     const db = admin.firestore();
 
@@ -585,13 +672,13 @@ async function restoreCompany(backupFile, options = {}) {
       .set(restoredCompanyData);
     console.log(`  ✅ 会社ドキュメントを作成しました`);
 
-    // 4. サブコレクションをリストア（Usersは後でリストア）
+    // 4. サブコレクションをリストア（Usersは最後にリストア）
     console.log("\n📚 サブコレクションをリストア中...");
     let restoredDocs = 0;
 
     for (const [collectionName, documents] of Object.entries(subCollections)) {
       if (!documents || documents.length === 0) continue;
-      if (collectionName === "Users") continue; // Usersは後でリストア
+      if (collectionName === "Users") continue; // Usersは最後にリストア
 
       console.log(`  📁 ${collectionName} (${documents.length}件)...`);
 
@@ -624,7 +711,23 @@ async function restoreCompany(backupFile, options = {}) {
       console.log(`  ✅ ${collectionName}: ${documents.length}件リストア完了`);
     }
 
-    // 5. Authenticationユーザーをリストア
+    // 5. Usersコレクションをリストア
+    console.log("\n📁 Usersコレクションをリストア中...");
+    if (subCollections.Users && subCollections.Users.length > 0) {
+      const batch = db.batch();
+      for (const doc of subCollections.Users) {
+        const docRef = db
+          .collection(`${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/Users`)
+          .doc(doc.docId);
+        const restoredData = convertStringsToTimestamps(doc.data);
+        batch.set(docRef, restoredData);
+        restoredDocs++;
+      }
+      await batch.commit();
+      console.log(`  ✅ Users: ${subCollections.Users.length}件リストア完了`);
+    }
+
+    // 6. Authenticationユーザーをリストア（最後に実行してCloud Functionsの削除を回避）
     console.log("\n👥 Authenticationユーザーをリストア中...");
     console.log(
       `  バックアップには ${authUsers.length} 人のユーザーが含まれています`
@@ -686,22 +789,6 @@ async function restoreCompany(backupFile, options = {}) {
       }
     }
 
-    // 6. Usersコレクションをリストア
-    console.log("\n📁 Usersコレクションをリストア中...");
-    if (subCollections.Users && subCollections.Users.length > 0) {
-      const batch = db.batch();
-      for (const doc of subCollections.Users) {
-        const docRef = db
-          .collection(`${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/Users`)
-          .doc(doc.docId);
-        const restoredData = convertStringsToTimestamps(doc.data);
-        batch.set(docRef, restoredData);
-        restoredDocs++;
-      }
-      await batch.commit();
-      console.log(`  ✅ Users: ${subCollections.Users.length}件リストア完了`);
-    }
-
     console.log("\n✅ リストアが完了しました！");
     console.log(`\n📈 リストア統計:`);
     console.log(`  - 会社名: ${company.companyName}`);
@@ -741,92 +828,96 @@ async function restoreCompany(backupFile, options = {}) {
  */
 async function listBackups(companyId = null, options = {}) {
   try {
+    // StorageAdapterを取得
+    const storage = createStorageAdapterFromEnv(options.storage);
+
     const outputDir = options.output || DEFAULT_BACKUP_DIR;
-    const companiesDir = path.join(outputDir, "companies");
 
     console.log("\n📋 バックアップ一覧を取得しています...\n");
 
-    try {
-      await fs.access(companiesDir);
-    } catch {
-      console.log("バックアップが見つかりません。");
-      return [];
-    }
-
     if (companyId) {
       // 特定の会社のバックアップを表示
-      const companyBackupDir = path.join(companiesDir, companyId);
-      try {
-        const files = await fs.readdir(companyBackupDir);
-        const backupFiles = files.filter(
-          (f) => f.startsWith("backup_") && f.endsWith(".json")
-        );
+      const companyPattern = path.join("companies", companyId, "backup_*.json");
+      const backupFiles = await storage.list(companyPattern, {
+        includeMetadata: true,
+      });
 
-        if (backupFiles.length === 0) {
-          console.log(`会社 ${companyId} のバックアップが見つかりません。`);
-          return [];
-        }
-
-        console.log(
-          `🏢 会社 ${companyId} のバックアップ (${backupFiles.length}件):\n`
-        );
-
-        for (const file of backupFiles.sort().reverse()) {
-          const filepath = path.join(companyBackupDir, file);
-          const stats = await fs.stat(filepath);
-          const content = await fs.readFile(filepath, "utf-8");
-          const data = JSON.parse(content);
-
-          console.log(`  📄 ${file}`);
-          console.log(
-            `     日時: ${new Date(data.backupDate).toLocaleString("ja-JP")}`
-          );
-          console.log(`     サイズ: ${(stats.size / 1024).toFixed(2)} KB`);
-          console.log(`     ドキュメント数: ${data.metadata.totalDocuments}`);
-          console.log(`     ユーザー数: ${data.metadata.totalAuthUsers}`);
-          console.log("");
-        }
-
-        return backupFiles;
-      } catch (error) {
+      if (backupFiles.length === 0) {
         console.log(`会社 ${companyId} のバックアップが見つかりません。`);
         return [];
       }
+
+      console.log(
+        `🏢 会社 ${companyId} のバックアップ (${backupFiles.length}件):\n`
+      );
+
+      for (const fileInfo of backupFiles.sort((a, b) =>
+        b.path.localeCompare(a.path)
+      )) {
+        const filename = path.basename(fileInfo.path);
+        let metadata = fileInfo.metadata;
+
+        // customMetadataがない場合（Storage Emulatorなど）、ファイルから取得
+        if (!metadata || !metadata.timestamp) {
+          const loaded = await storage.load(fileInfo.path);
+          metadata = loaded.metadata;
+        }
+
+        console.log(`  📄 ${filename}`);
+        console.log(`     日時: ${metadata.timestamp}`);
+        console.log(`     ドキュメント数: ${metadata.totalDocuments}`);
+        console.log(`     ユーザー数: ${metadata.totalAuthUsers}`);
+        console.log("");
+      }
+
+      return backupFiles.map((f) => path.basename(f.path));
     } else {
       // 全会社のバックアップを表示
-      const companies = await fs.readdir(companiesDir);
+      const allPattern = getStoragePath("companies", "**", "backup_*.json");
+      const allBackups = await storage.list(allPattern, {
+        includeMetadata: true,
+      });
 
-      if (companies.length === 0) {
+      if (allBackups.length === 0) {
         console.log("バックアップが見つかりません。");
         return [];
       }
 
-      console.log(`📊 バックアップが存在する会社 (${companies.length}社):\n`);
+      // 会社ごとにグループ化
+      const companiesMap = new Map();
+      for (const fileInfo of allBackups) {
+        // Firebase Storageは常に/区切りなので、path.sepではなく/で分割
+        const parts = fileInfo.path.split("/");
+        const companyId = parts[parts.indexOf("companies") + 1];
 
-      for (const companyId of companies) {
-        const companyBackupDir = path.join(companiesDir, companyId);
-        const files = await fs.readdir(companyBackupDir);
-        const backupFiles = files.filter(
-          (f) => f.startsWith("backup_") && f.endsWith(".json")
-        );
-
-        if (backupFiles.length > 0) {
-          const latestFile = backupFiles.sort().reverse()[0];
-          const filepath = path.join(companyBackupDir, latestFile);
-          const content = await fs.readFile(filepath, "utf-8");
-          const data = JSON.parse(content);
-
-          console.log(`  🏢 ${companyId}`);
-          console.log(`     会社名: ${data.company.companyName}`);
-          console.log(`     バックアップ数: ${backupFiles.length}件`);
-          console.log(
-            `     最新: ${new Date(data.backupDate).toLocaleString("ja-JP")}`
-          );
-          console.log("");
+        if (!companiesMap.has(companyId)) {
+          companiesMap.set(companyId, []);
         }
+        companiesMap.get(companyId).push(fileInfo);
       }
 
-      return companies;
+      console.log(`📊 バックアップが存在する会社 (${companiesMap.size}社):\n`);
+
+      for (const [companyId, files] of companiesMap.entries()) {
+        const latestFile = files.sort((a, b) =>
+          b.path.localeCompare(a.path)
+        )[0];
+        let metadata = latestFile.metadata;
+
+        // customMetadataがない場合（Storage Emulatorなど）、ファイルから取得
+        if (!metadata || !metadata.companyName) {
+          const loaded = await storage.load(latestFile.path);
+          metadata = loaded.metadata;
+        }
+
+        console.log(`  🏢 ${companyId}`);
+        console.log(`     会社名: ${metadata.companyName}`);
+        console.log(`     バックアップ数: ${files.length}件`);
+        console.log(`     最新: ${metadata.timestamp}`);
+        console.log("");
+      }
+
+      return Array.from(companiesMap.keys());
     }
   } catch (error) {
     console.error("\n❌ バックアップ一覧取得中にエラーが発生しました:");
@@ -840,58 +931,21 @@ async function listBackups(companyId = null, options = {}) {
  */
 async function restoreAllCompanies(timestamp, options = {}) {
   try {
+    // StorageAdapterを取得
+    const storage = createStorageAdapterFromEnv(options.storage);
+
     const outputDir = options.output || DEFAULT_BACKUP_DIR;
-    const companiesDir = path.join(outputDir, "companies");
 
     console.log("\n🔧 全会社のリストアを開始します");
     console.log(`📅 対象タイムスタンプ: ${timestamp}`);
 
-    // companiesディレクトリの存在確認
-    try {
-      await fs.access(companiesDir);
-    } catch {
-      console.error(
-        `❌ バックアップディレクトリが見つかりません: ${companiesDir}`
-      );
-      return {
-        success: false,
-        error: "backup-directory-not-found",
-      };
-    }
-
-    // 全会社ディレクトリを取得
+    // 全会社のバックアップファイルを検索
     console.log("\n📋 バックアップ対象の会社を検索中...");
-    const companyDirs = await fs.readdir(companiesDir);
-
-    if (companyDirs.length === 0) {
-      console.log("⚠️  バックアップが見つかりませんでした。");
-      return {
-        success: true,
-        totalCompanies: 0,
-        successCount: 0,
-        failedCompanies: [],
-        skippedCompanies: [],
-      };
-    }
-
-    // 指定タイムスタンプのバックアップファイルを検索
     const targetFilename = `backup_${timestamp}.json`;
-    const companiesToRestore = [];
+    const allPattern = getStoragePath("companies", "**", targetFilename);
+    const backupFiles = await storage.list(allPattern);
 
-    for (const companyId of companyDirs) {
-      const backupFilePath = path.join(companiesDir, companyId, targetFilename);
-      try {
-        await fs.access(backupFilePath);
-        companiesToRestore.push({
-          companyId,
-          backupFilePath,
-        });
-      } catch {
-        // このタイムスタンプのバックアップが存在しない会社はスキップ
-      }
-    }
-
-    if (companiesToRestore.length === 0) {
+    if (backupFiles.length === 0) {
       console.error(
         `❌ タイムスタンプ ${timestamp} のバックアップが見つかりませんでした。`
       );
@@ -901,6 +955,17 @@ async function restoreAllCompanies(timestamp, options = {}) {
         timestamp: timestamp,
       };
     }
+
+    // 会社IDとバックアップファイルパスのマッピング
+    const companiesToRestore = backupFiles.map((fileInfo) => {
+      // Firebase Storageは常に/区切りなので、path.sepではなく/で分割
+      const parts = fileInfo.path.split("/");
+      const companyId = parts[parts.indexOf("companies") + 1];
+      return {
+        companyId,
+        backupFilePath: fileInfo.path,
+      };
+    });
 
     console.log(
       `📊 ${companiesToRestore.length} 社のバックアップが見つかりました。\n`
@@ -974,9 +1039,8 @@ async function restoreAllCompanies(timestamp, options = {}) {
       // バックアップファイルから会社名を取得
       let companyName = companyId;
       try {
-        const content = await fs.readFile(backupFilePath, "utf-8");
-        const data = JSON.parse(content);
-        companyName = data.company.companyName || companyId;
+        const loaded = await storage.load(backupFilePath);
+        companyName = loaded.data.company.companyName || companyId;
       } catch {}
 
       console.log(

@@ -15,6 +15,8 @@ function setupEnvironmentEarly() {
     if (env === "emulator") {
       process.env.FIREBASE_AUTH_EMULATOR_HOST = "localhost:9099";
       process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
+      process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
+      process.env.IS_EMULATOR = "true"; // Emulator環境フラグ
     }
   }
 
@@ -25,6 +27,8 @@ function setupEnvironmentEarly() {
     if (env === "emulator") {
       process.env.FIREBASE_AUTH_EMULATOR_HOST = "localhost:9099";
       process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
+      process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
+      process.env.IS_EMULATOR = "true"; // Emulator環境フラグ
     }
   }
 }
