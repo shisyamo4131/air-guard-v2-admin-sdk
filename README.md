@@ -161,21 +161,24 @@ npm run cli:emulator system init                   # システム初期化
 ```bash
 npm run cli:emulator companies info <companyId>    # 会社情報表示
 npm run cli:emulator companies users <companyId>   # 会社のユーザー一覧
-npm run cli:emulator companies delete <companyId>  # 会社データ一括削除（⚠️危険）
-npm run cli:emulator companies delete <companyId> --force  # 確認スキップ
+npm run cli:emulator companies maintenance-on <companyId>   # メンテナンスモード有効化
+npm run cli:emulator companies maintenance-off <companyId>  # メンテナンスモード無効化
+npm run cli:emulator companies verify-users <companyId>     # Authentication/Users整合性検証
+npm run cli:emulator companies repair-users <companyId>     # 欠損Usersドキュメント修復（Auth削除）
+npm run cli:emulator companies delete <companyId>  # 会社データ一括削除（⚠️危険、二重確認）
 ```
 
 #### 💾 バックアップ・リストア（⭐ NEW）
 
 ```bash
-# 個別会社のバックアップ・リストア
-npm run cli:emulator backup company <companyId>    # 会社データをバックアップ
-npm run cli:emulator backup restore <companyId>    # インタラクティブリストア
-npm run cli:emulator backup restore <companyId> -f <file>  # ファイル指定リストア
+# 個別会社のバックアップ
+npm run cli:emulator backup company <companyId>    # 会社データをバックアップ（タイムスタンプ付き）
+npm run cli:emulator backup snapshot <companyId>   # スナップショット取得（差分自動計算）
+npm run cli:emulator backup diff <companyId>       # 差分計算（スタンドアロン）
 
-# 全会社のバックアップ・リストア（統一タイムスタンプ）
-npm run cli:emulator backup all                    # 全会社をバックアップ（同じタイムスタンプ）
-npm run cli:emulator backup restore-all <timestamp> # 指定タイムスタンプで全会社をリストア
+# リストア（メンテナンスモード必須）
+npm run cli:emulator backup restore <companyId> --collections Customers Sites  # 差分ベースリストア（推奨）
+npm run cli:emulator backup restore-full <companyId> --collections all        # フルバックアップリストア（緊急用）
 
 # バックアップ一覧
 npm run cli:emulator backup list                   # 全バックアップ一覧
@@ -211,20 +214,19 @@ async function example() {
     // 会社管理（✅ 全て実装済み）
     await sdk.getCompanyInfo("company-id-123");
     await sdk.listCompanyUsers("company-id-123");
+    await sdk.enableCompanyMaintenance("company-id-123", "データリストア作業");
+    await sdk.disableCompanyMaintenance("company-id-123");
+    await sdk.verifyCompanyUsers("company-id-123");
+    await sdk.repairCompanyUsers("company-id-123");
     await sdk.deleteCompany("company-id-123");
 
     // バックアップ・リストア（✅ 全て実装済み）
-    // 個別会社
     await sdk.backupCompany("company-id-123");
-    await sdk.restoreCompany(
-      "./backups/companies/company-id-123/backup_2025-11-29_15-17-21.json"
-    );
+    await sdk.snapshotCompany("company-id-123"); // スナップショット + 差分計算
+    await sdk.diffBackup("company-id-123"); // 差分計算のみ
+    await sdk.restoreDiff("company-id-123", ["Customers", "Sites"]); // 差分ベース
+    await sdk.restoreFull("company-id-123", ["Customers"]); // フル（緊急用）
     await sdk.listBackups("company-id-123");
-
-    // 全会社（統一タイムスタンプ）
-    const result = await sdk.backupAllCompanies();
-    console.log(result.timestamp); // 2025-11-29_16-54-10
-    await sdk.restoreAllCompanies("2025-11-29_16-54-10");
 
     // 環境切り替え
     sdk.setEnvironment("dev");
@@ -257,20 +259,22 @@ async function example() {
 
     // 会社管理（✅ 全て実装済み）
     await companies.getCompanyInfo("company-id-123", options);
+    await companies.enableMaintenanceMode("company-id-123", {
+      ...options,
+      reason: "データリストア作業",
+    });
+    await companies.disableMaintenanceMode("company-id-123", options);
+    await companies.verifyUsers("company-id-123", options);
+    await companies.repairUsers("company-id-123", options);
     await companies.deleteCompany("company-id-123", options);
 
-    // バックアップ・リストア（✅ 全て実装済まで）
-    // 個別会社
+    // バックアップ・リストア（✅ 全て実装済み）
     await backup.backupCompany("company-id-123", options);
-    await backup.restoreCompany(
-      "./backups/companies/company-id-123/backup_2025-11-29_15-17-21.json",
-      options
-    );
+    await backup.snapshotCompany("company-id-123", options);
+    await backup.diffBackup("company-id-123", options);
+    await backup.restoreDiff("company-id-123", ["Customers", "Sites"], options);
+    await backup.restoreSelective("company-id-123", ["Customers"], options);
     await backup.listBackups("company-id-123", options);
-
-    // 全会社（統一タイムスタンプ）
-    await backup.backupAllCompanies(options);
-    await backup.restoreAllCompanies("2025-11-29_16-54-10", options);
   } catch (error) {
     console.error("Error:", error.message);
   }
@@ -281,62 +285,144 @@ async function example() {
 
 #### 概要
 
-会社データ（Firestore ドキュメント + Authentication ユーザー）を完全にバックアップし、後から復元できます。
+会社データ（Firestore ドキュメント）のバックアップと、効率的な差分ベースリストアを提供します。
 
 **主要機能:**
 
-- 個別会社のバックアップ・リストア
-- **全会社の一括バックアップ（統一タイムスタンプ）**
-- **指定タイムスタンプで全会社を一括リストア**
-- 本番環境では 2 回確認プロンプトで安全性向上
+- 個別会社のバックアップ（タイムスタンプ付きファイル）
+- スナップショット + 自動差分計算
+- 差分ベースリストア（変更されたドキュメントのみ）
+- フルバックアップリストア（緊急用、全ドキュメント）
+- メンテナンスモードによる排他制御
 
 #### バックアップ対象
 
-会社ドキュメント: Companies/{companyId}
-全サブコレクション: 14 コレクション（Customers, Employees, Users, etc.）
-Authentication ユーザー: メタデータ、カスタムクレーム
-バックアップファイル
-保存先: ./backups/companies/{companyId}/
-ファイル名: backup_YYYY-MM-DD_HH-MM-SS.json（JST）
-フォーマット: JSON（Timestamp は ISO 文字列に変換）
+- **会社ドキュメント**: `Companies/{companyId}`
+- **サブコレクション**: 10 コレクション（Customers, Sites, Employees, Outsourcers, SiteOperationSchedules, OperationResults, Billings, ArrangementNotifications, Autonumbers, Users）
+- **保存先**: `backups/companies/{companyId}/backup_YYYY-MM-DD_HH-MM-SS.json`（JST）
+- **フォーマット**: JSON（Timestamp は ISO 文字列に変換）
+
+#### スナップショットと差分
+
+- **スナップショット**: 現在の状態を固定ファイル名で保存 (`temporary/companies/{companyId}/snapshot.json`)
+- **差分計算**: スナップショットと最新バックアップを比較し、added/modified/deleted/unchanged を検出
+- **差分データ**: `temporary/companies/{companyId}/diff/` に保存（summary.json + 各コレクション.json）
+- **updatedAt 比較**: タイムスタンプで変更を検出（同じ ID でも更新されたドキュメントを識別）
 
 #### リストア動作
 
-⚠️ 完全置換モード: リストア実行時、既存データは全て削除され、バックアップ時点のデータで完全に置き換えられます。
+**差分ベースリストア（推奨）:**
 
-1. 既存の Firestore サブコレクションを全削除
-2. 既存の Authentication ユーザーを全削除
-3. バックアップデータで復元
-4. 仮パスワード生成（ユーザーにパスワードリセット依頼が必要）
+- データソース: `temporary/companies/{companyId}/diff/` の差分データ
+- 処理: added（作成）、modified（更新）、deleted（復元）のみ、unchanged（スキップ）
+- 効率: 変更されたドキュメントのみ処理
+- 安全: Authentication/Users は自動除外
+
+**フルバックアップリストア（緊急用）:**
+
+- データソース: `backups/companies/{companyId}/backup_*.json`
+- 処理: バックアップ内の全ドキュメントを書き込み
+- 用途: 差分データが利用できない場合の緊急復旧
+- 安全: Authentication/Users は自動除外
+
+**共通の安全機能:**
+
+1. メンテナンスモード必須（リストア前に有効化）
+2. Authentication/Users コレクション自動除外
+3. マージ型リストア（既存データに差分を適用、削除なし）
+4. Cloud Functions 待機時間適用（依存関係を考慮）
 
 ##### 使用例
 
+**基本ワークフロー:**
+
 ```bash
-# 個別会社のバックアップ作成
+# 1. 定期バックアップ（タイムスタンプ付きファイル）
 npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m
 
-# 全会社のバックアップ（統一タイムスタンプ）
-npm run cli:emulator backup all
+# 2. メンテナンスモード有効化
+npm run cli:emulator companies maintenance-on Qa1JpI7dLMjIXeW3lB2m --reason "データリストア作業"
 
-# インタラクティブリストア（個別会社）
-npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m
+# 3. スナップショット取得（差分も自動計算）
+npm run cli:emulator backup snapshot Qa1JpI7dLMjIXeW3lB2m
 
-# 全会社を指定タイムスタンプからリストア
-npm run cli:emulator backup restore-all 2025-11-29_16-54-10
+# 4. 差分ベースリストア（変更されたドキュメントのみ）
+npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
 
+# 5. メンテナンスモード無効化
+npm run cli:emulator companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
+```
+
+**緊急時（フルバックアップリストア）:**
+
+```bash
+# メンテナンスモード有効化
+npm run cli:emulator companies maintenance-on Qa1JpI7dLMjIXeW3lB2m --reason "緊急データ復旧"
+
+# フルバックアップリストア（全ドキュメント）
+npm run cli:emulator backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections all
+
+# メンテナンスモード無効化
+npm run cli:emulator companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
+```
+
+**バックアップ管理:**
+
+```bash
 # バックアップ一覧
 npm run cli:emulator backup list
 npm run cli:emulator backup list Qa1JpI7dLMjIXeW3lB2m
+
+# 差分確認
+cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/summary.json
 ```
 
 ##### 重要な注意事項
 
-- **データの完全置換**: バックアップ取得後に追加したデータもリストア時に削除される
-- **仮パスワード**: リストアした Authentication ユーザーには仮パスワードが設定される
-- **UID 保持**: 元の UID が保持されるため、データの参照関係は維持される
-- **統一タイムスタンプ**: `backup all` コマンドでは全会社で同じタイムスタンプが使用される
-- **確認プロンプト**: 全会社リストアでは最初に 1 回のみ確認（本番環境では 2 回）
-- **タイムスタンプ形式**: JST（日本標準時）で `YYYY-MM-DD_HH-MM-SS` 形式
+- **マージ型リストア**: 既存データに差分を適用(既存データを削除しない)
+- **メンテナンスモード必須**: リストア前に必ず有効化(排他制御)
+- **Authentication/Users 除外**: 自動的にリストア対象から除外(安全性確保)
+- **差分検出**: updatedAt タイムスタンプで変更を正確に検出
+- **Cloud Functions 待機**: Customers/OperationResults は適切な待機時間を適用
+- **タイムスタンプ形式**: JST(日本標準時)で `YYYY-MM-DD_HH-MM-SS` 形式
+- **効率的な復旧**: 差分ベースリストアは変更されたドキュメントのみ処理
+
+##### Authentication/Users の整合性について
+
+**整合性検証機能**: 未実装（将来実装予定）
+
+**用語定義:**
+
+- **スーパーユーザー**: サービス提供側の管理者（Admin SDK 使用可能）
+- **会社の Admin**: 各会社の管理者（アプリ上で自社データの全権限、Admin SDK 使用不可）
+- **利用者**: 会社に所属する一般ユーザー
+- **一時ユーザー**: `isTemporary: true`の Users ドキュメント（Authentication 未作成）
+
+**ユーザー登録フロー:**
+
+1. 会社の Admin がユーザー管理で Users ドキュメントを追加（`isTemporary: true`）
+2. 利用者がサインアップで Authentication 作成後、`isTemporary: false`に更新
+
+**整合性の問題と対処方法:**
+
+1. **孤立 Users ドキュメント**（Authentication に存在しない UID）
+
+   - **対処**: 会社の Admin がアプリ上で対象ユーザーを削除し、再作成
+   - Users ドキュメント削除時、Cloud Functions の onDelete トリガーで Authentication 自動削除
+   - 新規ユーザーとして招待・作成することで整合性を復旧
+
+2. **欠損 Users ドキュメント**（Authentication は存在するが Users がない）
+   - **症状**: ログイン可能だが権限情報が取得できず、アプリが正常動作しない
+   - **検証**: `companies verify-users <companyId>` で整合性チェック（✅ 実装済み）
+   - **修復**: `companies repair-users <companyId>` で Authentication アカウント削除（✅ 実装済み）
+   - **前提条件**: `isAdmin: true`の管理者アカウントが存在すること（不在時は会社データ再構築が必要）
+   - **後処理**: 会社の Admin に再招待依頼
+
+**検証対象外:**
+
+- `isTemporary: true`の Users ドキュメント（Authentication 未作成のため正常）
+
+**注意**: リストアコマンドは Users コレクションと Authentication 情報を一切変更しないため、手動での整合性確保が必要です。
 
 ## 🐛 トラブルシューティング
 
@@ -409,10 +495,14 @@ npm run cli:emulator backup list Qa1JpI7dLMjIXeW3lB2m
 
 ### バックアップ・リストア
 
-- **完全置換**: リストアは既存データを完全に削除して置き換える
-- **仮パスワード**: リストア後、ユーザーはパスワードリセットが必要
+- **マージ型リストア**: 既存データに差分を適用（削除なし）
+- **メンテナンスモード必須**: リストア前に必ず有効化
+- **Authentication/Users 除外**: 自動的にリストア対象から除外
+- **差分ベースリストア**: 変更されたドキュメントのみ処理（効率的）
+- **フルバックアップリストア**: 緊急時用、全ドキュメント書き込み
 - **定期バックアップ**: 重要な操作前には必ずバックアップを取得
 - **バックアップ管理**: 古いバックアップファイルの定期的な整理を推奨
+- **差分確認**: summary.json で変更内容を事前確認可能
 
 ### 環境の選択
 
@@ -443,13 +533,18 @@ npm run cli:prod <command>
 1. **定数ファイルの更新**: `src/constants/collections.js` の `COMPANY_SUBCOLLECTIONS` 配列に追加
 
    ```javascript
-   const COMPANY_SUBCOLLECTIONS = [
-     "ArrangementNotifications",
-     "Autonumbers",
+   export const COMPANY_SUBCOLLECTIONS = [
      // ... 既存のコレクション
-     "NewCollection", // 新しいコレクションを追加
+     {
+       name: "NewCollection",
+       waitAfterClear: 0, // 初期化後の待機時間(ms)
+       waitAfterRestore: 0, // リストア後の待機時間(ms)
+       description: "新しいコレクションの説明",
+     },
    ];
    ```
+
+   **Cloud Functions トリガーがある場合**: `waitAfterClear`と`waitAfterRestore`に適切な待機時間を設定してください（コールドスタートを考慮して 3000 ～ 5000ms 推奨）
 
 ### テスト
 

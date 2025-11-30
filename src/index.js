@@ -93,31 +93,66 @@ class AirGuardAdminSDK {
     return await companiesCommands.deleteCompany(companyId, this.options);
   }
 
+  async enableCompanyMaintenance(companyId, reason = "データ復旧作業中") {
+    return await companiesCommands.enableMaintenanceMode(companyId, {
+      ...this.options,
+      reason,
+    });
+  }
+
+  async disableCompanyMaintenance(companyId) {
+    return await companiesCommands.disableMaintenanceMode(
+      companyId,
+      this.options
+    );
+  }
+
+  async verifyCompanyUsers(companyId) {
+    return await companiesCommands.verifyUsers(companyId, this.options);
+  }
+
+  async repairCompanyUsers(companyId) {
+    return await companiesCommands.repairUsers(companyId, this.options);
+  }
+
   // Backup commands
-  async backupCompany(companyId, outputDir) {
+  async backupCompany(companyId, outputDir = "./backups") {
     return await backupCommands.backupCompany(companyId, {
       ...this.options,
       output: outputDir,
     });
   }
 
-  async backupAllCompanies(outputDir) {
-    return await backupCommands.backupAllCompanies({
+  async snapshotCompany(companyId, outputDir = "./backups") {
+    return await backupCommands.snapshotCompany(companyId, {
       ...this.options,
       output: outputDir,
     });
   }
 
-  async listBackups(companyId) {
-    return await backupCommands.listBackups(companyId, this.options);
+  async diffBackup(companyId, outputDir = "./backups") {
+    return await backupCommands.diffBackup(companyId, {
+      ...this.options,
+      output: outputDir,
+    });
   }
 
-  async restoreCompany(backupFile) {
-    return await backupCommands.restoreCompany(backupFile, this.options);
+  async restoreDiff(companyId, collections = ["all"], outputDir = "./backups") {
+    return await backupCommands.restoreDiff(companyId, collections, {
+      ...this.options,
+      output: outputDir,
+    });
   }
 
-  async restoreAllCompanies(timestamp, outputDir) {
-    return await backupCommands.restoreAllCompanies(timestamp, {
+  async restoreFull(companyId, collections = ["all"], outputDir = "./backups") {
+    return await backupCommands.restoreSelective(companyId, collections, {
+      ...this.options,
+      output: outputDir,
+    });
+  }
+
+  async listBackups(companyId, outputDir = "./backups") {
+    return await backupCommands.listBackups(companyId, {
       ...this.options,
       output: outputDir,
     });
@@ -154,13 +189,18 @@ module.exports = {
     getCompanyInfo: companiesCommands.getCompanyInfo,
     listCompanyUsers: companiesCommands.listCompanyUsers,
     deleteCompany: companiesCommands.deleteCompany,
+    enableMaintenanceMode: companiesCommands.enableMaintenanceMode,
+    disableMaintenanceMode: companiesCommands.disableMaintenanceMode,
+    verifyUsers: companiesCommands.verifyUsers,
+    repairUsers: companiesCommands.repairUsers,
   },
 
   backup: {
     backupCompany: backupCommands.backupCompany,
-    backupAllCompanies: backupCommands.backupAllCompanies,
-    restoreCompany: backupCommands.restoreCompany,
-    restoreAllCompanies: backupCommands.restoreAllCompanies,
+    snapshotCompany: backupCommands.snapshotCompany,
+    diffBackup: backupCommands.diffBackup,
+    restoreDiff: backupCommands.restoreDiff,
+    restoreSelective: backupCommands.restoreSelective,
     listBackups: backupCommands.listBackups,
   },
 };
@@ -171,15 +211,43 @@ module.exports = {
  * // クラス使用
  * const { AirGuardAdminSDK } = require('air-guard-v2-admin-sdk');
  * const sdk = new AirGuardAdminSDK({ env: 'emulator' });
+ *
+ * // ユーザー管理
  * await sdk.listSuperUsers();
+ * await sdk.getUidByEmail('user@example.com');
+ *
+ * // システム管理
+ * await sdk.getMaintenanceStatus();
+ * await sdk.enableMaintenance();
+ *
+ * // 会社管理
  * await sdk.getCompanyInfo('company-id-123');
+ * await sdk.enableCompanyMaintenance('company-id-123', 'データリストア作業');
+ * await sdk.disableCompanyMaintenance('company-id-123');
+ * await sdk.verifyCompanyUsers('company-id-123');
+ * await sdk.repairCompanyUsers('company-id-123');
  * await sdk.deleteCompany('company-id-123');
  *
+ * // バックアップ・リストア
+ * await sdk.backupCompany('company-id-123');
+ * await sdk.snapshotCompany('company-id-123');
+ * await sdk.diffBackup('company-id-123');
+ * await sdk.restoreDiff('company-id-123', ['Customers', 'Sites']);
+ * await sdk.restoreFull('company-id-123', ['all']);
+ * await sdk.listBackups('company-id-123');
+ *
  * // 直接関数使用
- * const { users, claims, system, companies } = require('air-guard-v2-admin-sdk');
+ * const { users, claims, system, companies, backup } = require('air-guard-v2-admin-sdk');
  * await users.listSuperUsers({ env: 'prod' });
  * await claims.setSuperUserClaim('user@example.com', { env: 'emulator' });
  * await system.enableMaintenance({ env: 'prod' });
  * await companies.getCompanyInfo('company-id-123', { env: 'emulator' });
- * await companies.deleteCompany('company-id-123', { env: 'emulator' });
+ * await companies.enableMaintenanceMode('company-id-123', { env: 'emulator', reason: 'メンテナンス' });
+ * await companies.verifyUsers('company-id-123', { env: 'emulator' });
+ * await companies.repairUsers('company-id-123', { env: 'emulator' });
+ * await backup.backupCompany('company-id-123', { env: 'emulator' });
+ * await backup.snapshotCompany('company-id-123', { env: 'emulator' });
+ * await backup.diffBackup('company-id-123', { env: 'emulator' });
+ * await backup.restoreDiff('company-id-123', ['Customers'], { env: 'emulator' });
+ * await backup.restoreSelective('company-id-123', ['all'], { env: 'emulator' });
  */

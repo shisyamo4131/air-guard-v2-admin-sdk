@@ -33,28 +33,36 @@
 
 ### 🏢 会社管理 (Companies)
 
-| コマンド                       | 説明                                      | 引数                 | 実装状況    |
-| ------------------------------ | ----------------------------------------- | -------------------- | ----------- |
-| `companies info <companyId>`   | 会社情報を表示                            | `companyId`: 会社 ID | ✅ 実装済み |
-| `companies users <companyId>`  | 会社に紐づくユーザー一覧を表示            | `companyId`: 会社 ID | ✅ 実装済み |
-| `companies delete <companyId>` | 会社とすべての関連データを削除（⚠️ 危険） | `companyId`: 会社 ID | ✅ 実装済み |
-|                                | オプション: `-f, --force` 確認スキップ    |                      |             |
+| コマンド                                | 説明                                      | 引数                 | 実装状況    |
+| --------------------------------------- | ----------------------------------------- | -------------------- | ----------- |
+| `companies info <companyId>`            | 会社情報を表示                            | `companyId`: 会社 ID | ✅ 実装済み |
+| `companies users <companyId>`           | 会社に紐づくユーザー一覧を表示            | `companyId`: 会社 ID | ✅ 実装済み |
+| `companies maintenance-on <companyId>`  | 会社のメンテナンスモードを有効化          | `companyId`: 会社 ID | ✅ 実装済み |
+|                                         | オプション: `--reason` メンテナンス理由   |                      |             |
+| `companies maintenance-off <companyId>` | 会社のメンテナンスモードを無効化          | `companyId`: 会社 ID | ✅ 実装済み |
+| `companies verify-users <companyId>`    | Authentication/Users 整合性検証           | `companyId`: 会社 ID | ✅ 実装済み |
+| `companies repair-users <companyId>`    | 欠損 Users ドキュメント修復（Auth 削除）  | `companyId`: 会社 ID | ✅ 実装済み |
+| `companies delete <companyId>`          | 会社とすべての関連データを削除（⚠️ 危険） | `companyId`: 会社 ID | ✅ 実装済み |
+|                                         | 二重確認: yes/no + 会社 ID 入力           |                      |             |
 
 ### 💾 バックアップ・リストア (Backup)（⭐ NEW）
 
-| コマンド                         | 説明                                                    | 引数                                    | 実装状況    |
-| -------------------------------- | ------------------------------------------------------- | --------------------------------------- | ----------- |
-| `backup company <companyId>`     | 会社データをバックアップ                                | `companyId`: 会社 ID                    | ✅ 実装済み |
-|                                  | オプション: `-o, --output` 出力先指定                   |                                         |             |
-| `backup all`                     | 全会社のデータをバックアップ（統一タイムスタンプ）      | なし                                    | ✅ 実装済み |
-|                                  | オプション: `-o, --output` 出力先指定                   |                                         |             |
-| `backup restore <companyId>`     | インタラクティブリストア（ファイル選択）                | `companyId`: 会社 ID                    | ✅ 実装済み |
-|                                  | オプション: `-f, --file` ファイル指定                   |                                         |             |
-|                                  | オプション: `-o, --output` バックアップディレクトリ指定 |                                         |             |
-| `backup restore-all <timestamp>` | 全会社を指定タイムスタンプからリストア                  | `timestamp`: バックアップタイムスタンプ | ✅ 実装済み |
-|                                  | オプション: `-o, --output` バックアップディレクトリ指定 |                                         |             |
-| `backup list [companyId]`        | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社）  | ✅ 実装済み |
-|                                  | オプション: `-o, --output` バックアップディレクトリ指定 |                                         |             |
+| コマンド                          | 説明                                                    | 引数                                   | 実装状況    |
+| --------------------------------- | ------------------------------------------------------- | -------------------------------------- | ----------- |
+| `backup company <companyId>`      | 会社データをバックアップ（固定ファイル保存）            | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                   | オプション: `-o, --output` 出力先指定                   |                                        |             |
+| `backup snapshot <companyId>`     | スナップショット取得（自動で差分計算実行）              | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                   | 保存先: `temporary/companies/{companyId}/snapshot.json` |                                        |             |
+| `backup diff <companyId>`         | 差分計算（snapshot.json と最新バックアップを比較）      | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                   | 出力先: `temporary/companies/{companyId}/diff/`         |                                        |             |
+| `backup restore <companyId>`      | 差分ベースリストア（変更されたドキュメントのみ）        | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                   | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
+|                                   | ⚠️ メンテナンスモード必須                               |                                        |             |
+| `backup restore-full <companyId>` | フルバックアップリストア（全ドキュメント、緊急用）      | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                   | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
+|                                   | ⚠️ メンテナンスモード必須                               |                                        |             |
+| `backup list [companyId]`         | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社） | ✅ 実装済み |
+|                                   | オプション: `-o, --output` バックアップディレクトリ指定 |                                        |             |
 
 ## 🌟 基本的な使用方法
 
@@ -261,22 +269,181 @@ npm run cli:dev companies users company-id-123
 npm run cli:emulator companies users company-id-123
 ```
 
+#### メンテナンスモード制御
+
+```bash
+# メンテナンスモードを有効化
+npm run cli:emulator companies maintenance-on Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev companies maintenance-on Qa1JpI7dLMjIXeW3lB2m --reason "データリストア作業"
+
+# メンテナンスモードを無効化
+npm run cli:emulator companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
+```
+
+**出力例:**
+
+```
+✅ メンテナンスモードを有効化しました
+🏢 会社ID: Qa1JpI7dLMjIXeW3lB2m
+📝 理由: データリストア作業
+👤 実行者: admin@example.com
+📅 開始時刻: 2025/11/30 12:00:00
+```
+
+#### Authentication/Users 整合性検証
+
+```bash
+# 整合性を検証（読み取り専用、安全）
+npm run cli:emulator companies verify-users Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev companies verify-users Qa1JpI7dLMjIXeW3lB2m
+```
+
+**機能:**
+
+- Authentication ユーザーと Users ドキュメントの整合性を検証
+- 孤立 Users ドキュメント検出（Authentication に存在しない UID）
+- 欠損 Users ドキュメント検出（Authentication は存在するが Users がない）
+- `isTemporary: true`の Users ドキュメントは検証対象外（Authentication 未作成のため正常）
+
+**ユーザー登録フロー:**
+
+1. 会社の Admin がユーザー管理で Users ドキュメント追加（`isTemporary: true`）
+2. 利用者がサインアップ時に Authentication 作成、`isTemporary: false`に更新
+
+#### 欠損 Users ドキュメントの修復
+
+```bash
+# 欠損Usersドキュメントを修復（Authenticationアカウント削除）
+npm run cli:emulator companies repair-users Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev companies repair-users Qa1JpI7dLMjIXeW3lB2m
+```
+
+**処理フロー:**
+
+1. 整合性検証実行
+2. 欠損 Users ドキュメントがない → 終了
+3. 管理者アカウント（`isAdmin: true`）が存在するか確認
+   - 存在しない → エラー（会社データ再構築が必要）
+4. 各欠損ユーザーに companyId 確認後、Authentication アカウントを削除
+5. 会社の Admin に再招待依頼
+
+**出力例（成功）:**
+
+```
+🔧 欠損Usersドキュメントを修復しています... (ID: Qa1JpI7dLMjIXeW3lB2m)
+
+🏢 会社: 株式会社唯心
+
+🔍 整合性を検証しています...
+[整合性検証出力...]
+
+⚠️  欠損Usersドキュメント: 2件
+
+🔍 管理者アカウントの存在を確認しています...
+✅ 管理者アカウントが存在します。修復を続行します。
+
+🗑️  2件のAuthenticationアカウントを削除します...
+✅ 削除: user1@example.com (UID: abc123...)
+✅ 削除: user2@example.com (UID: def456...)
+
+✅ 修復が完了しました！
+
+📊 修復サマリー:
+  - 削除成功: 2件
+  - 削除失敗: 0件
+
+📋 削除されたAuthenticationアカウント:
+  - user1@example.com (UID: abc123...)
+  - user2@example.com (UID: def456...)
+
+💡 次のステップ: 会社のAdminに以下のユーザーの再招待を依頼してください。
+  - user1@example.com
+  - user2@example.com
+```
+
+**出力例（管理者不在エラー）:**
+
+```
+⚠️  欠損Usersドキュメント: 3件
+
+🔍 管理者アカウントの存在を確認しています...
+
+❌ 管理者アカウント（isAdmin: true）が見つかりません。
+   会社データの整合性が失われています。
+   この会社データは再構築が必要です。
+
+💡 対処方法: 新しい会社データを作成し、データを移行してください。
+```
+
+**出力例（整合性 OK）:**
+
+```
+🔍 Authentication/Users整合性を検証しています... (ID: Qa1JpI7dLMjIXeW3lB2m)
+
+🏢 会社: 株式会社唯心
+
+📊 Usersコレクション: 2件
+📊 Authenticationユーザー: 2件
+
+✅ 整合性: OK
+   すべてのAuthenticationとUsersドキュメントが一致しています。
+```
+
+**出力例（問題検出時）:**
+
+```
+🔍 Authentication/Users整合性を検証しています... (ID: Qa1JpI7dLMjIXeW3lB2m)
+
+🏢 会社: 株式会社唯心
+
+📊 Usersコレクション: 3件
+📊 Authenticationユーザー: 2件
+
+⚠️  整合性の問題を検出しました:
+
+🔴 孤立Usersドキュメント: 1件
+   （Authenticationに存在しないUID）
+   - UID: abc123def456
+     Email: old-user@example.com
+
+   💡 対処方法: 会社のAdminがアプリ上でユーザーを削除し、再作成
+              Usersドキュメント削除時、Cloud FunctionsでAuthentication自動削除
+
+🔴 欠損Usersドキュメント: 1件
+   （Authenticationは存在するがUsersがない）
+   - UID: xyz789ghi012
+     Email: new-user@example.com
+     DisplayName: 新規ユーザー
+
+   💡 対処方法: `companies repair-users <companyId>` コマンドで自動修復
+```
+
 #### 会社データの削除
 
 ```bash
-# 会社データを削除（確認あり）
+# 会社データを削除（二重確認）
 npm run cli:emulator companies delete company-id-123
 
-# 会社データを強制削除（確認スキップ）
-npm run cli:emulator companies delete company-id-123 --force
+# 確認プロンプト:
+# 1. yes/no入力
+# 2. 会社ID入力（確認）
 ```
+
+**削除プロセス:**
+
+1. 会社情報の表示
+2. 「yes」または「no」の入力
+3. 削除する会社 ID の再入力（誤削除防止）
+4. 各サブコレクションの削除（Cloud Functions 待機時間を適用）
+5. 会社ドキュメントの削除
 
 #### バックアップ・リストア
 
-##### 個別会社のバックアップ
+##### 会社のバックアップ（固定ファイル）
 
 ```bash
-# 会社データをバックアップ
+# 会社データをバックアップ（タイムスタンプ付きファイル）
 npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m
 npm run cli:dev backup company Qa1JpI7dLMjIXeW3lB2m
 
@@ -284,134 +451,127 @@ npm run cli:dev backup company Qa1JpI7dLMjIXeW3lB2m
 npm run cli:emulator backup company Qa1JpI7dLMjIXeW3lB2m -o ./custom-backups
 ```
 
-##### 全会社のバックアップ（統一タイムスタンプ）
+**保存先:** `backups/companies/{companyId}/backup_YYYY-MM-DD_HH-MM-SS.json`
+
+##### スナップショット取得（自動差分計算）
 
 ```bash
-# 全会社のデータをバックアップ（全会社で同じタイムスタンプ）
-npm run cli:emulator backup all
-npm run cli:dev backup all
-
-# 出力先を指定
-npm run cli:emulator backup all -o ./custom-backups
+# 現在の状態をスナップショット取得（差分計算も自動実行）
+npm run cli:emulator backup snapshot Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev backup snapshot Qa1JpI7dLMjIXeW3lB2m
 ```
 
-##### 出力例（個別会社）
+**保存先:** `temporary/companies/{companyId}/snapshot.json`（固定名、上書き）
 
-🔧 バックアップを開始します
-📂 出力先: ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
+**処理内容:**
 
-📦 会社データを収集しています... (ID: Qa1JpI7dLMjIXeW3lB2m)
-📄 会社ドキュメントを取得中...
-✅ 会社: 株式会社唯心
+1. 現在の会社データを取得
+2. snapshot.json として保存
+3. 自動的に差分計算（diffBackup）を実行
+4. 差分データを`temporary/companies/{companyId}/diff/`に出力
 
-📚 サブコレクションを取得中...
-✅ Customers: 15 ドキュメント
-✅ Employees: 8 ドキュメント
-✅ Users: 2 ドキュメント
-⏭️ ArrangementNotifications: ドキュメントなし
-
-👥 Authentication ユーザー情報を取得中...
-✅ m-kaneko@yuisin.net (UID: GmYhoVNJNrKRV2TL188yl1SDcS6K)
-✅ maruyama@yuisin.net (UID: OhAPJ75W0KdE3LtL4lpFVPRw6EvZ)
-
-✅ バックアップが完了しました！
-📄 ファイル: ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
-📊 ファイルサイズ: 45.23 KB
-
-📈 バックアップ統計:
-
-- 会社名: 株式会社唯心
-- 総ドキュメント数: 43
-- Authentication ユーザー数: 2
-- コレクション数: 6
-
-#### インタラクティブリストア（個別会社）
+##### 差分計算（スタンドアロン）
 
 ```bash
-# バックアップファイルを選択してリストア
-npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m
-npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m
+# 最新バックアップとスナップショットの差分を計算
+npm run cli:emulator backup diff Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev backup diff Qa1JpI7dLMjIXeW3lB2m
 ```
 
-📋 会社 Qa1JpI7dLMjIXeW3lB2m のバックアップを検索中...
+**出力先:** `temporary/companies/{companyId}/diff/`
 
-? リストアするバックアップファイルを選択してください: (Use arrow keys)
-❯ backup_2025-11-29_15-17-21.json - 2025/11/29 15:17:21 (43 ドキュメント, 2 ユーザー)
-backup_2025-11-28_10-30-15.json - 2025/11/28 10:30:15 (40 ドキュメント, 2 ユーザー)
-backup_2025-11-27_18-45-00.json - 2025/11/27 18:45:00 (38 ドキュメント, 1 ユーザー)
+- `summary.json` - 差分サマリー
+- `{collection}.json` - 各コレクションの変更内容（added, modified, deleted）
 
-? このバックアップからリストアしますか？ (y/N)
+**差分計算ロジック:**
 
-#### ファイル指定リストア
+- ドキュメント ID 比較で追加/削除を検出
+- `updatedAt`タイムスタンプ比較で変更を検出
+- 変更なしドキュメントは記録しない（効率化）
+
+**出力例:**
+
+```
+🔍 差分を計算しています...
+📊 差分サマリー:
+  - Customers: 追加 1件, 変更 1件, 削除 1件
+  - Sites: 追加 0件, 変更 2件, 削除 0件
+
+✅ 差分データを保存しました
+📂 保存先: temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/
+```
+
+##### 差分ベースリストア（推奨）
 
 ```bash
-# バックアップファイルを直接指定してリストア
-npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m -f ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
+# 差分データからリストア（変更されたドキュメントのみ）
+npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
+npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers
 
-# カスタムディレクトリからリストア
-npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m -f ./custom-backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json -o ./custom-backups
+# 全コレクションをリストア
+npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m --collections all
 ```
 
-##### 出力例
+**前提条件:**
 
-🔧 リストアを開始します
-📂 バックアップファイル: ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
+- メンテナンスモードが有効であること
+- `temporary/companies/{companyId}/diff/`に差分データが存在すること
 
-📖 バックアップファイルを読み込んでいます...
+**処理内容:**
 
-🏢 会社情報:
+1. メンテナンスモード確認
+2. 差分データ読み込み
+3. added: ドキュメント作成
+4. modified: ドキュメント更新
+5. deleted: ドキュメント削除（復元）
+6. unchanged: スキップ（効率化）
+7. Cloud Functions 待機時間適用
 
-- 会社名: 株式会社唯心
-- 会社 ID: Qa1JpI7dLMjIXeW3lB2m
-- バックアップ日時: 2025/11/29 15:17:21
+**Authentication/Users 除外:**
 
-⚠️ 既存データの削除について:
-リストアを実行すると、既存のデータは完全に置き換えられます。
+- Users コレクションは自動的にリストア対象から除外
+- Authentication 情報は一切変更されない（安全性確保）
 
-既存データを削除してリストアしますか？ (yes/no): yes
+**出力例:**
 
-🗑️ 既存データを削除中...
-✅ Customers: 15 件削除
-✅ Employees: 8 件削除
-✅ Users: 2 件削除
+```
+🔧 差分ベースリストアを開始します
+🏢 会社ID: Qa1JpI7dLMjIXeW3lB2m
+📊 差分データ:
+  - スナップショット: 2025/11/30 12:17:12
+  - バックアップ: 2025/11/30 12:09:11
 
-🗑️ 既存 Authentication ユーザーを削除中...
-✅ m-kaneko@yuisin.net を削除
-✅ maruyama@yuisin.net を削除
+✅ メンテナンスモードを確認しました
 
-📄 会社ドキュメントをリストア中...
-✅ 会社ドキュメントを作成しました
+📁 Customers (3件)
+  - 追加: 1件
+  - 変更: 1件
+  - 削除復元: 1件
+⏳ Cloud Functions処理待機中... (5000ms)
+✅ Customers: 3件リストア完了
 
-📚 サブコレクションをリストア中...
-📁 Customers (15 件)...
-✅ Customers: 15 件リストア完了
-📁 Employees (8 件)...
-✅ Employees: 8 件リストア完了
+✅ リストア完了！
+📊 統計: 追加 1件, 変更 1件, 削除復元 1件
+```
 
-👥 Authentication ユーザーをリストア中...
-バックアップには 2 人のユーザーが含まれています
-⚙️ m-kaneko@yuisin.net を作成中...
-✅ m-kaneko@yuisin.net (仮パスワード: Temp1732855041abc123def!)
-⚙️ maruyama@yuisin.net を作成中...
-✅ maruyama@yuisin.net (仮パスワード: Temp1732855042xyz789ghi!)
+##### フルバックアップリストア（緊急用）
 
-📁 Users コレクションをリストア中...
-✅ Users: 2 件リストア完了
+```bash
+# 全ドキュメントをバックアップからリストア（非効率、緊急時用）
+npm run cli:emulator backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
+npm run cli:dev backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections all
+```
 
-✅ リストアが完了しました！
+**差分リストアとの違い:**
 
-📈 リストア統計:
+- データソース: バックアップファイル（`backups/companies/{companyId}/backup_*.json`）
+- 処理方法: 全ドキュメントを書き込み（変更なしも含む）
+- 用途: 緊急時、差分データが利用できない場合
 
-- 会社名: 株式会社唯心
-- 総ドキュメント数: 43
-- Authentication ユーザー数: 2/2
+**Authentication/Users 除外:**
 
-🔑 リストアしたユーザーの仮パスワード:
-
-- m-kaneko@yuisin.net: Temp1732855041abc123def!
-- maruyama@yuisin.net: Temp1732855042xyz789ghi!
-
-⚠️ ユーザーにパスワードリセットを依頼してください。
+- フルリストアでも Users コレクションは自動除外
+- Authentication 情報は変更されない
 
 #### バックアップ一覧の表示
 
@@ -520,12 +680,32 @@ npm run cli:emulator backup list -o ./custom-backups
 
 ```bash
 ⚠️ バックアップ・リストアの重要事項
-- リストアは完全置換モード（既存データを全削除）
-- バックアップ取得後に追加したデータもリストア時に削除される
-- Authenticationユーザーには仮パスワードが設定される
-- ユーザーにパスワードリセットの依頼が必要
-- 重要な操作前には必ずバックアップを取得
-- バックアップファイルには機密情報が含まれる
+
+【リストアモード】
+- 差分ベースリストア（推奨）: 変更されたドキュメントのみ処理（効率的）
+- フルバックアップリストア（緊急用）: 全ドキュメント書き込み（非効率）
+
+【安全機能】
+- メンテナンスモード必須: リストア前に必ず有効化
+- Authentication/Users除外: 自動的にリストア対象から除外
+- 二重確認: 会社削除時は二段階確認プロセス
+
+【データ処理】
+- マージ型リストア: 既存データに差分を適用（削除なし）
+- Cloud Functions待機: 適切な待機時間で依存関係を考慮
+- Timestamp保持: updatedAtなどのタイムスタンプを正確に復元
+
+【ワークフロー】
+1. メンテナンスモード有効化
+2. スナップショット取得（差分自動計算）
+3. 差分確認（summary.json）
+4. 差分ベースリストア
+5. メンテナンスモード無効化
+
+【バックアップ管理】
+- 定期バックアップ推奨: 重要な操作前に必ず実行
+- 機密情報を含む: バックアップファイルの取り扱いに注意
+- ストレージ管理: 古いバックアップの定期的な整理
 ```
 
 ## 🆘 ヘルプの表示
@@ -619,89 +799,66 @@ npm run cli:emulator companies delete company-dev-123 --force
 
 #### 定期バックアップの取得
 
-# 1. 現在の会社データをバックアップ
-
+```bash
+# 1. 現在の会社データをバックアップ（タイムスタンプ付きファイル）
 npm run cli:dev backup company Qa1JpI7dLMjIXeW3lB2m
 
 # 2. バックアップ一覧で確認
+npm run cli:dev backup list Qa1JpI7dLMjIXeW3lB2m
+```
 
+#### 差分ベースリストアの手順（推奨）
+
+```bash
+# 1. メンテナンスモードを有効化
+npm run cli:dev companies maintenance-on Qa1JpI7dLMjIXeW3lB2m --reason "データリストア作業"
+
+# 2. スナップショット取得（差分も自動計算される）
+npm run cli:dev backup snapshot Qa1JpI7dLMjIXeW3lB2m
+
+# 3. 差分サマリーを確認（任意）
+# temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/summary.json を確認
+
+# 4. 差分ベースリストア実行
+npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
+
+# または全コレクション
+npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections all
+
+# 5. メンテナンスモードを無効化
+npm run cli:dev companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
+```
+
+#### フルバックアップリストアの手順（緊急用）
+
+```bash
+# 1. メンテナンスモードを有効化
+npm run cli:dev companies maintenance-on Qa1JpI7dLMjIXeW3lB2m --reason "緊急データ復旧"
+
+# 2. バックアップ一覧を確認
 npm run cli:dev backup list Qa1JpI7dLMjIXeW3lB2m
 
-#### データ復旧の手順
+# 3. フルバックアップリストア実行
+npm run cli:dev backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
 
-# 1. バックアップ一覧を確認
-
-npm run cli:dev backup list Qa1JpI7dLMjIXeW3lB2m
-
-# 2. インタラクティブリストアでファイル選択
-
-npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m
-
-# 3. 確認して実行
-
-# yes と入力して既存データを削除・リストア
-
-# 4. リストア完了後、仮パスワードをユーザーに通知
-
-# 出力された仮パスワードをユーザーに送信
+# 4. メンテナンスモードを無効化
+npm run cli:dev companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
+```
 
 #### 重要な変更前のバックアップ
 
+```bash
 # 1. 変更前にバックアップを取得
-
 npm run cli:dev backup company Qa1JpI7dLMjIXeW3lB2m
 
 # 2. 変更作業を実施
+# 何か重要な変更を実施...
 
-npm run cli:dev companies delete some-data
-
-# 3. 問題があればリストアで復旧
-
-npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m -f ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json
-
-#### 全会社の一括リストア
-
-```bash
-# 指定タイムスタンプで全会社をリストア
-npm run cli:emulator backup restore-all 2025-11-29_16-54-10
-npm run cli:dev backup restore-all 2025-11-29_16-54-10
-
-# カスタムディレクトリから
-npm run cli:emulator backup restore-all 2025-11-29_16-54-10 -o ./custom-backups
-```
-
-**重要な注意事項:**
-
-- 最初に 1 回確認プロンプトが表示されます
-- 本番環境（prod）では安全のため 2 回確認が表示されます
-- 各会社ごとの個別確認はスキップされます
-- 既存データは全て削除されます
-
-##### 出力例
-
-```
-🔧 全会社のリストアを開始します
-📅 対象タイムスタンプ: 2025-11-29_16-54-10
-
-📋 バックアップ対象の会社を検索中...
-📊 2 社のバックアップが見つかりました。
-
-⚠️  2 社のデータをリストアしますか？既存データは全て削除されます。 (yes/no): yes
-
-📦 [1/2] 株式会社テスト (PRJK9JTHbMX52JNoFHtD)
-────────────────────────────────────────────────────────────
-[リストア処理...]
-
-📦 [2/2] 株式会社唯心 (Qa1JpI7dLMjIXeW3lB2m)
-────────────────────────────────────────────────────────────
-[リストア処理...]
-
-✅ 全会社のリストアが完了しました！
-📊 リストアサマリー:
-  - タイムスタンプ: 2025-11-29_16-54-10
-  - 対象会社数: 2 社
-  - 成功: 2 社
-  - 失敗: 0 社
+# 3. 問題があれば差分ベースリストアで復旧
+npm run cli:dev companies maintenance-on Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev backup snapshot Qa1JpI7dLMjIXeW3lB2m
+npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections all
+npm run cli:dev companies maintenance-off Qa1JpI7dLMjIXeW3lB2m
 ```
 
 #### Emulator 環境でのテスト復旧
@@ -723,19 +880,33 @@ npm run cli:emulator backup restore test-company-id
 npm run cli:emulator companies info test-company-id
 npm run cli:emulator companies users test-company-id
 
-#### 環境間でのデータ移行（将来実装）
+#### 差分データの確認
 
-# Dev 環境からバックアップ取得
+```bash
+# 差分サマリーを確認
+cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/summary.json
 
-npm run cli:dev backup company Qa1JpI7dLMjIXeW3lB2m
+# 特定コレクションの差分詳細を確認
+cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/Customers.json
+```
 
-# バックアップファイルをコピー
+**summary.json 構造:**
 
-cp ./backups/companies/Qa1JpI7dLMjIXeW3lB2m/backup_2025-11-29_15-17-21.json ./migration/
-
-# Prod 環境へリストア（将来実装）
-
-# npm run cli:prod backup restore Qa1JpI7dLMjIXeW3lB2m -f ./migration/backup_2025-11-29_15-17-21.json
+```json
+{
+  "companyId": "Qa1JpI7dLMjIXeW3lB2m",
+  "snapshotDate": "2025-11-30T03:17:12.123Z",
+  "backupDate": "2025-11-30T03:09:11.456Z",
+  "collections": {
+    "Customers": {
+      "added": 1,
+      "modified": 1,
+      "deleted": 1,
+      "unchanged": 12
+    }
+  }
+}
+```
 
 ### バックアップファイルの構造
 

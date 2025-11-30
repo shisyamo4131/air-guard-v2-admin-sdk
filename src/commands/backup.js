@@ -179,7 +179,8 @@ async function collectCompanyData(companyId) {
   console.log("\n  📚 サブコレクションを取得中...");
   const subCollections = {};
 
-  for (const collectionName of COMPANY_SUBCOLLECTIONS) {
+  for (const collection of COMPANY_SUBCOLLECTIONS) {
+    const collectionName = collection.name;
     const snapshot = await db
       .collection(
         `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
@@ -310,107 +311,139 @@ async function backupCompany(companyId, options = {}) {
 }
 
 /**
- * 全会社のバックアップを取得
+ * 会社の現在状態をスナップショット取得（リストア前の差分確認用）
+ * temporary/companies/{companyId}/snapshot.json に保存
  */
-async function backupAllCompanies(options = {}) {
+async function snapshotCompany(companyId, options = {}) {
   try {
     const db = admin.firestore();
-    const outputDir = options.output || DEFAULT_BACKUP_DIR;
-    // 全会社で統一されたタイムスタンプを生成
-    const timestamp = getJSTTimestamp();
 
-    console.log("\n🔧 全会社のバックアップを開始します");
-    console.log(`📅 バックアップタイムスタンプ: ${timestamp}`);
+    console.log(`\n📸 スナップショット取得を開始します (ID: ${companyId})`);
 
-    // 全会社を取得
-    console.log("\n📋 会社一覧を取得中...");
-    const companiesSnapshot = await db
+    // 1. メンテナンスモードの確認
+    console.log("\n🔍 メンテナンスモード状態を確認中...");
+    const companyDoc = await db
       .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
       .get();
 
-    if (companiesSnapshot.empty) {
-      console.log("⚠️  会社が見つかりませんでした。");
+    if (!companyDoc.exists) {
+      throw new Error(`会社ID ${companyId} が見つかりません。`);
+    }
+
+    const companyData = companyDoc.data();
+    const isMaintenanceMode = companyData.maintenanceMode === true;
+
+    if (!isMaintenanceMode) {
+      console.log("\n❌ メンテナンスモードが有効になっていません。");
+      console.log(
+        "⚠️  リストア作業中はユーザーの操作を排他する必要があります。\n"
+      );
+      console.log("メンテナンスモードを有効化してから再実行してください:");
+      console.log(`   npm run cli companies maintenance-on ${companyId}\n`);
       return {
-        success: true,
-        totalCompanies: 0,
-        successCount: 0,
-        failedCompanies: [],
-        timestamp: timestamp,
+        success: false,
+        reason: "maintenance-mode-required",
+        companyId,
+        companyName: companyData.companyName,
       };
     }
 
-    console.log(`📊 ${companiesSnapshot.size} 社の会社が見つかりました。\n`);
+    console.log("✅ メンテナンスモード: 有効");
+    console.log(`   理由: ${companyData.maintenanceReason || "未設定"}`);
+    console.log(
+      `   開始: ${
+        companyData.maintenanceStartedAt
+          ? companyData.maintenanceStartedAt.toDate().toLocaleString("ja-JP")
+          : "不明"
+      }`
+    );
 
-    const results = {
-      success: true,
-      totalCompanies: companiesSnapshot.size,
-      successCount: 0,
-      failedCompanies: [],
-      backups: [],
-      timestamp: timestamp,
+    // 2. StorageAdapterを取得
+    const storage = createStorageAdapterFromEnv(options.storage);
+
+    // 3. スナップショット保存先（固定ファイル名）
+    const relativePath = getStoragePath(
+      "temporary",
+      "companies",
+      companyId,
+      "snapshot.json"
+    );
+
+    console.log(`\n📂 保存先: ${relativePath}`);
+
+    // 既存のスナップショットファイルがあるか確認
+    const existingSnapshot = await storage.exists(relativePath);
+    if (existingSnapshot) {
+      console.log("ℹ️  既存のスナップショットを上書きします");
+    }
+
+    // 4. 現在のデータを収集
+    const snapshotData = await collectCompanyData(companyId);
+
+    // 5. メタデータを準備
+    let environment;
+    if (process.env.IS_EMULATOR === "true") {
+      environment = "EMULATOR";
+    } else if (process.env.FIREBASE_ENV === "prod") {
+      environment = "PROD";
+    } else if (process.env.FIREBASE_ENV === "dev") {
+      environment = "DEV";
+    } else {
+      environment = "UNKNOWN";
+    }
+
+    const metadata = {
+      companyId: companyId,
+      companyName: snapshotData.company.companyName,
+      timestamp: getJSTTimestamp(),
+      totalDocuments: snapshotData.metadata.totalDocuments,
+      totalAuthUsers: snapshotData.metadata.totalAuthUsers,
+      collections: snapshotData.metadata.collections.join(","),
+      environment: environment,
+      isSnapshot: true, // スナップショットであることを示すフラグ
     };
 
-    // 各会社をバックアップ
-    for (const doc of companiesSnapshot.docs) {
-      const companyId = doc.id;
-      const companyData = doc.data();
-      const companyName = companyData.companyName || "名称未設定";
+    // 6. StorageAdapterで保存
+    await storage.save(relativePath, snapshotData, metadata);
 
-      console.log(
-        `\n📦 [${results.successCount + 1}/${
-          companiesSnapshot.size
-        }] ${companyName} (${companyId})`
-      );
-      console.log("─".repeat(60));
+    // ファイルサイズ計算
+    const jsonContent = JSON.stringify(snapshotData, null, 2);
+    const fileSizeKB = (Buffer.byteLength(jsonContent, "utf8") / 1024).toFixed(
+      2
+    );
 
-      try {
-        // 統一タイムスタンプを渡す
-        const result = await backupCompany(companyId, {
-          ...options,
-          timestamp,
-        });
-        results.successCount++;
-        results.backups.push({
-          companyId,
-          companyName,
-          filepath: result.filepath,
-          success: true,
-        });
-      } catch (error) {
-        console.error(
-          `❌ ${companyName} のバックアップに失敗: ${error.message}`
-        );
-        results.failedCompanies.push({
-          companyId,
-          companyName,
-          error: error.message,
-        });
-      }
-    }
+    console.log("\n✅ スナップショット取得が完了しました！");
+    console.log(`📄 ファイル: ${relativePath}`);
+    console.log(`📊 ファイルサイズ: ${fileSizeKB} KB (概算)`);
+    console.log(`\n📈 スナップショット統計:`);
+    console.log(`  - 会社名: ${snapshotData.company.companyName}`);
+    console.log(
+      `  - 総ドキュメント数: ${snapshotData.metadata.totalDocuments}`
+    );
+    console.log(
+      `  - Authenticationユーザー数: ${snapshotData.metadata.totalAuthUsers}`
+    );
+    console.log(
+      `  - コレクション数: ${snapshotData.metadata.collections.length}`
+    );
 
-    // サマリー表示
+    // 7. 自動的に差分を計算
     console.log("\n" + "═".repeat(60));
-    console.log("✅ 全会社のバックアップが完了しました！");
+    console.log("🔄 差分を自動計算しています...");
     console.log("═".repeat(60));
-    console.log(`\n📊 バックアップサマリー:`);
-    console.log(`  - バックアップタイムスタンプ: ${timestamp}`);
-    console.log(`  - 対象会社数: ${results.totalCompanies} 社`);
-    console.log(`  - 成功: ${results.successCount} 社`);
-    console.log(`  - 失敗: ${results.failedCompanies.length} 社`);
-    console.log(`  - 出力先: ${outputDir}/companies/`);
 
-    if (results.failedCompanies.length > 0) {
-      console.log(`\n⚠️  失敗した会社:`);
-      results.failedCompanies.forEach((failed) => {
-        console.log(
-          `  - ${failed.companyName} (${failed.companyId}): ${failed.error}`
-        );
-      });
-    }
+    const diffResult = await diffBackup(companyId, options);
 
-    return results;
+    return {
+      success: true,
+      filepath: relativePath,
+      snapshotData: snapshotData,
+      companyName: snapshotData.company.companyName,
+      diffResult: diffResult,
+    };
   } catch (error) {
-    console.error("\n❌ 全会社バックアップ中にエラーが発生しました:");
+    console.error("\n❌ スナップショット取得中にエラーが発生しました:");
     console.error(error.message);
     throw error;
   }
@@ -623,7 +656,8 @@ async function restoreCompany(backupFile, options = {}) {
 
     // 1. 既存のサブコレクションを削除（全て）
     console.log("\n🗑️  既存データを削除中...");
-    for (const collectionName of COMPANY_SUBCOLLECTIONS) {
+    for (const collection of COMPANY_SUBCOLLECTIONS) {
+      const collectionName = collection.name;
       const snapshot = await db
         .collection(
           `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
@@ -642,6 +676,16 @@ async function restoreCompany(backupFile, options = {}) {
         if (count > 0) {
           await batch.commit();
           console.log(`  ✅ ${collectionName}: ${count}件削除`);
+
+          // Cloud Functions完了待機
+          if (collection.waitAfterClear > 0) {
+            console.log(
+              `  ⏳ Cloud Functions処理待機中... (${collection.waitAfterClear}ms)`
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, collection.waitAfterClear)
+            );
+          }
         }
       }
     }
@@ -672,13 +716,15 @@ async function restoreCompany(backupFile, options = {}) {
       .set(restoredCompanyData);
     console.log(`  ✅ 会社ドキュメントを作成しました`);
 
-    // 4. サブコレクションをリストア（Usersは最後にリストア）
+    // 4. サブコレクションをリストア（定義順序に従う）
     console.log("\n📚 サブコレクションをリストア中...");
     let restoredDocs = 0;
 
-    for (const [collectionName, documents] of Object.entries(subCollections)) {
+    for (const collection of COMPANY_SUBCOLLECTIONS) {
+      const collectionName = collection.name;
+      const documents = subCollections[collectionName];
+
       if (!documents || documents.length === 0) continue;
-      if (collectionName === "Users") continue; // Usersは最後にリストア
 
       console.log(`  📁 ${collectionName} (${documents.length}件)...`);
 
@@ -709,22 +755,16 @@ async function restoreCompany(backupFile, options = {}) {
       }
 
       console.log(`  ✅ ${collectionName}: ${documents.length}件リストア完了`);
-    }
 
-    // 5. Usersコレクションをリストア
-    console.log("\n📁 Usersコレクションをリストア中...");
-    if (subCollections.Users && subCollections.Users.length > 0) {
-      const batch = db.batch();
-      for (const doc of subCollections.Users) {
-        const docRef = db
-          .collection(`${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/Users`)
-          .doc(doc.docId);
-        const restoredData = convertStringsToTimestamps(doc.data);
-        batch.set(docRef, restoredData);
-        restoredDocs++;
+      // Cloud Functions完了待機
+      if (collection.waitAfterRestore > 0) {
+        console.log(
+          `  ⏳ Cloud Functions処理待機中... (${collection.waitAfterRestore}ms)`
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, collection.waitAfterRestore)
+        );
       }
-      await batch.commit();
-      console.log(`  ✅ Users: ${subCollections.Users.length}件リストア完了`);
     }
 
     // 6. Authenticationユーザーをリストア（最後に実行してCloud Functionsの削除を回避）
@@ -818,6 +858,405 @@ async function restoreCompany(backupFile, options = {}) {
     };
   } catch (error) {
     console.error("\n❌ リストア中にエラーが発生しました:");
+    console.error(error.message);
+    throw error;
+  }
+}
+
+/**
+ * スナップショットと直近バックアップの差分を表示
+ */
+async function diffBackup(companyId, options = {}) {
+  try {
+    const db = admin.firestore();
+    const storage = createStorageAdapterFromEnv(options.storage);
+
+    console.log(`\n📊 差分を確認しています... (ID: ${companyId})`);
+
+    // 1. メンテナンスモード状態を確認
+    console.log("\n🔍 メンテナンスモード状態を確認中...");
+    const companyDoc = await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
+      .get();
+
+    if (!companyDoc.exists) {
+      throw new Error(`会社ID ${companyId} が見つかりません。`);
+    }
+
+    const companyData = companyDoc.data();
+    const isMaintenanceMode = companyData.maintenanceMode === true;
+
+    if (isMaintenanceMode) {
+      console.log("✅ メンテナンスモード: 有効");
+    } else {
+      console.log("⚠️  メンテナンスモード: 無効");
+      console.log(
+        "   リストア実行前にメンテナンスモードを有効化してください。"
+      );
+    }
+
+    // 2. スナップショットファイルの確認
+    console.log("\n📸 スナップショットファイルを確認中...");
+    const snapshotPath = getStoragePath(
+      "temporary",
+      "companies",
+      companyId,
+      "snapshot.json"
+    );
+
+    const snapshotExists = await storage.exists(snapshotPath);
+    if (!snapshotExists) {
+      console.log("\n❌ スナップショットファイルが見つかりません。");
+      console.log("先にスナップショットを取得してください:");
+      console.log(`   npm run cli backup snapshot ${companyId}\n`);
+      return {
+        success: false,
+        reason: "snapshot-not-found",
+      };
+    }
+
+    const snapshotData = await storage.load(snapshotPath);
+    console.log("✅ スナップショット: 取得済み");
+    console.log(
+      `   取得日時: ${new Date(snapshotData.data.backupDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+
+    // 3. 直近の確定バックアップを取得
+    console.log("\n📦 直近の確定バックアップを検索中...");
+    const backupPattern = getStoragePath(
+      "companies",
+      companyId,
+      "backup_*.json"
+    );
+    const backupFiles = await storage.list(backupPattern, {
+      includeMetadata: true,
+    });
+
+    if (backupFiles.length === 0) {
+      console.log("\n⚠️  確定バックアップが見つかりません。");
+      console.log("比較対象のバックアップがないため、差分は表示できません。");
+      console.log("\n現在のスナップショット情報:");
+      console.log(
+        `  - 総ドキュメント数: ${snapshotData.data.metadata.totalDocuments}`
+      );
+      console.log(
+        `  - コレクション数: ${snapshotData.data.metadata.collections.length}`
+      );
+      return {
+        success: false,
+        reason: "no-backup-found",
+        snapshotData: snapshotData.data,
+      };
+    }
+
+    // 最新のバックアップを取得（ファイル名でソート）
+    const latestBackup = backupFiles.sort((a, b) =>
+      b.path.localeCompare(a.path)
+    )[0];
+    const backupData = await storage.load(latestBackup.path);
+    console.log("✅ 直近バックアップ: 取得済み");
+    console.log(
+      `   取得日時: ${new Date(backupData.data.backupDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+    console.log(`   ファイル: ${path.basename(latestBackup.path)}`);
+
+    // 4. 差分を計算
+    console.log("\n🔍 差分を計算中...");
+
+    const snapshot = snapshotData.data;
+    const backup = backupData.data;
+
+    const allCollections = new Set([
+      ...Object.keys(snapshot.subCollections),
+      ...Object.keys(backup.subCollections),
+    ]);
+
+    const collectionDiffs = [];
+    let totalAdded = 0;
+    let totalDeleted = 0;
+    let totalModified = 0;
+
+    // コレクション別に詳細な差分を計算
+    for (const collectionName of Array.from(allCollections).sort()) {
+      const snapshotDocs = snapshot.subCollections[collectionName] || [];
+      const backupDocs = backup.subCollections[collectionName] || [];
+
+      const snapshotMap = new Map(snapshotDocs.map((d) => [d.docId, d]));
+      const backupMap = new Map(backupDocs.map((d) => [d.docId, d]));
+
+      const added = [];
+      const deleted = [];
+      const modified = [];
+      const unchanged = [];
+
+      // 追加と変更を検出
+      for (const [docId, snapshotDoc] of snapshotMap) {
+        if (!backupMap.has(docId)) {
+          // 追加されたドキュメント
+          added.push({
+            docId,
+            data: snapshotDoc.data,
+          });
+        } else {
+          const backupDoc = backupMap.get(docId);
+
+          // updatedAt で比較
+          if (
+            snapshotDoc.data.updatedAt &&
+            snapshotDoc.data.updatedAt._timestamp &&
+            backupDoc.data.updatedAt &&
+            backupDoc.data.updatedAt._timestamp
+          ) {
+            const snapshotTime = new Date(snapshotDoc.data.updatedAt.value);
+            const backupTime = new Date(backupDoc.data.updatedAt.value);
+
+            if (snapshotTime > backupTime) {
+              modified.push({
+                docId,
+                beforeUpdatedAt: backupTime.toISOString(),
+                afterUpdatedAt: snapshotTime.toISOString(),
+                data: snapshotDoc.data,
+              });
+            } else {
+              unchanged.push(docId);
+            }
+          } else {
+            // updatedAt がない場合は変更なしとみなす
+            unchanged.push(docId);
+          }
+        }
+      }
+
+      // 削除を検出
+      for (const [docId, backupDoc] of backupMap) {
+        if (!snapshotMap.has(docId)) {
+          deleted.push({
+            docId,
+            data: backupDoc.data,
+          });
+        }
+      }
+
+      totalAdded += added.length;
+      totalDeleted += deleted.length;
+      totalModified += modified.length;
+
+      collectionDiffs.push({
+        collection: collectionName,
+        added,
+        deleted,
+        modified,
+        unchanged,
+        summary: {
+          addedCount: added.length,
+          deletedCount: deleted.length,
+          modifiedCount: modified.length,
+          unchangedCount: unchanged.length,
+          totalBefore: backupDocs.length,
+          totalAfter: snapshotDocs.length,
+        },
+      });
+    }
+
+    // 5. 差分データをファイルに保存
+    console.log("\n💾 差分データを保存中...");
+    const diffBasePath = getStoragePath(
+      "temporary",
+      "companies",
+      companyId,
+      "diff"
+    );
+
+    // 各コレクションの差分を個別ファイルに保存
+    for (const collectionDiff of collectionDiffs) {
+      if (
+        collectionDiff.added.length > 0 ||
+        collectionDiff.deleted.length > 0 ||
+        collectionDiff.modified.length > 0
+      ) {
+        const diffFilePath = getStoragePath(
+          diffBasePath,
+          `${collectionDiff.collection}.json`
+        );
+        await storage.save(
+          diffFilePath,
+          {
+            collection: collectionDiff.collection,
+            snapshotDate: snapshot.backupDate,
+            backupDate: backup.backupDate,
+            companyId: companyId,
+            companyName: snapshot.company.companyName,
+            added: collectionDiff.added,
+            deleted: collectionDiff.deleted,
+            modified: collectionDiff.modified,
+            summary: collectionDiff.summary,
+          },
+          {
+            companyId: companyId,
+            collection: collectionDiff.collection,
+            addedCount: collectionDiff.added.length,
+            deletedCount: collectionDiff.deleted.length,
+            modifiedCount: collectionDiff.modified.length,
+          }
+        );
+        console.log(`  ✅ ${collectionDiff.collection}.json`);
+      }
+    }
+
+    // サマリーファイルを保存
+    const summaryPath = getStoragePath(diffBasePath, "summary.json");
+    await storage.save(
+      summaryPath,
+      {
+        companyId: companyId,
+        companyName: snapshot.company.companyName,
+        snapshotDate: snapshot.backupDate,
+        backupDate: backup.backupDate,
+        isMaintenanceMode: isMaintenanceMode,
+        collections: collectionDiffs.map((cd) => ({
+          collection: cd.collection,
+          summary: cd.summary,
+        })),
+        totalSummary: {
+          totalAdded: totalAdded,
+          totalDeleted: totalDeleted,
+          totalModified: totalModified,
+          totalDocsBefore: backup.metadata.totalDocuments,
+          totalDocsAfter: snapshot.metadata.totalDocuments,
+        },
+      },
+      {
+        companyId: companyId,
+        totalAdded: totalAdded,
+        totalDeleted: totalDeleted,
+        totalModified: totalModified,
+      }
+    );
+    console.log(`  ✅ summary.json`);
+    console.log(`\n📂 差分保存先: ${diffBasePath}/`);
+
+    // 6. ターミナルに差分サマリーを表示
+    console.log("\n" + "═".repeat(60));
+    console.log("📈 差分サマリー");
+    console.log("═".repeat(60));
+
+    console.log(`\n🏢 会社情報:`);
+    console.log(`   会社名: ${snapshot.company.companyName}`);
+    console.log(
+      `   スナップショット: ${new Date(snapshot.backupDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+    console.log(
+      `   直近バックアップ: ${new Date(backup.backupDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+
+    console.log(`\n📚 コレクション別差分:`);
+    console.log("─".repeat(60));
+
+    for (const collectionDiff of collectionDiffs) {
+      const { collection, summary } = collectionDiff;
+      const changes = [];
+
+      if (summary.addedCount > 0) changes.push(`📈 +${summary.addedCount}`);
+      if (summary.deletedCount > 0) changes.push(`📉 -${summary.deletedCount}`);
+      if (summary.modifiedCount > 0)
+        changes.push(`📝 ${summary.modifiedCount}件変更`);
+
+      const status = changes.length > 0 ? changes.join(", ") : "➡️  変化なし";
+
+      console.log(
+        `  ${collection.padEnd(30)} ${String(summary.totalBefore).padStart(
+          5
+        )} → ${String(summary.totalAfter).padStart(5)} ${status}`
+      );
+    }
+
+    // Authentication ユーザーの差分
+    console.log(`\n👥 Authenticationユーザー:`);
+    const snapshotAuthCount = snapshot.authUsers.length;
+    const backupAuthCount = backup.authUsers.length;
+    const authDiff = snapshotAuthCount - backupAuthCount;
+
+    let authStatus = "";
+    if (authDiff > 0) {
+      authStatus = `📈 +${authDiff}`;
+    } else if (authDiff < 0) {
+      authStatus = `📉 ${authDiff}`;
+    } else {
+      authStatus = "➡️  変化なし";
+    }
+
+    console.log(
+      `  Authenticationユーザー         ${String(backupAuthCount).padStart(
+        5
+      )} → ${String(snapshotAuthCount).padStart(5)} ${authStatus}`
+    );
+
+    // 総ドキュメント数
+    const totalSnapshotDocs = snapshot.metadata.totalDocuments;
+    const totalBackupDocs = backup.metadata.totalDocuments;
+    const totalDocDiff = totalSnapshotDocs - totalBackupDocs;
+
+    console.log("\n" + "═".repeat(60));
+    console.log(
+      `📊 総ドキュメント数: ${totalBackupDocs} → ${totalSnapshotDocs}`
+    );
+    if (totalDocDiff > 0) {
+      console.log(`   📈 +${totalDocDiff} ドキュメント増加`);
+    } else if (totalDocDiff < 0) {
+      console.log(`   📉 ${Math.abs(totalDocDiff)} ドキュメント減少`);
+    } else {
+      console.log(`   ➡️  変化なし`);
+    }
+
+    console.log(
+      `   詳細: 追加 ${totalAdded}件, 削除 ${totalDeleted}件, 変更 ${totalModified}件`
+    );
+    console.log("═".repeat(60));
+
+    // 次のステップの案内
+    if (totalAdded > 0 || totalDeleted > 0 || totalModified > 0) {
+      console.log("\n💡 次のステップ:");
+      console.log(
+        `   リストア実行: npm run cli backup restore ${companyId} --collections <コレクション名>`
+      );
+      console.log(
+        `   例: npm run cli backup restore ${companyId} --collections Customers,Employees`
+      );
+    } else {
+      console.log("\n✅ 差分がありません。リストアの必要はありません。");
+    }
+
+    if (!isMaintenanceMode) {
+      console.log(
+        "\n⚠️  リストア実行前に必ずメンテナンスモードを有効化してください:"
+      );
+      console.log(`   npm run cli companies maintenance-on ${companyId}`);
+    }
+
+    return {
+      success: true,
+      companyId,
+      companyName: snapshot.company.companyName,
+      isMaintenanceMode,
+      snapshotDate: snapshot.backupDate,
+      backupDate: backup.backupDate,
+      collectionDiffs,
+      totalAdded,
+      totalDeleted,
+      totalModified,
+      diffBasePath,
+    };
+  } catch (error) {
+    console.error("\n❌ 差分確認中にエラーが発生しました:");
     console.error(error.message);
     throw error;
   }
@@ -927,173 +1366,462 @@ async function listBackups(companyId = null, options = {}) {
 }
 
 /**
- * 全会社を指定されたタイムスタンプからリストア
+ * 選択的リストア（コレクション指定）
+ * Authentication/Usersは除外される
  */
-async function restoreAllCompanies(timestamp, options = {}) {
+async function restoreSelective(companyId, options = {}) {
   try {
-    // StorageAdapterを取得
+    const db = admin.firestore();
     const storage = createStorageAdapterFromEnv(options.storage);
 
-    const outputDir = options.output || DEFAULT_BACKUP_DIR;
+    console.log(`\n🔧 選択的リストアを開始します (ID: ${companyId})`);
 
-    console.log("\n🔧 全会社のリストアを開始します");
-    console.log(`📅 対象タイムスタンプ: ${timestamp}`);
+    // 1. メンテナンスモード確認
+    console.log("\n🔍 メンテナンスモード状態を確認中...");
+    const companyDoc = await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
+      .get();
 
-    // 全会社のバックアップファイルを検索
-    console.log("\n📋 バックアップ対象の会社を検索中...");
-    const targetFilename = `backup_${timestamp}.json`;
-    const allPattern = getStoragePath("companies", "**", targetFilename);
-    const backupFiles = await storage.list(allPattern);
-
-    if (backupFiles.length === 0) {
-      console.error(
-        `❌ タイムスタンプ ${timestamp} のバックアップが見つかりませんでした。`
-      );
-      return {
-        success: false,
-        error: "no-backups-found",
-        timestamp: timestamp,
-      };
+    if (!companyDoc.exists) {
+      throw new Error(`会社ID ${companyId} が見つかりません。`);
     }
 
-    // 会社IDとバックアップファイルパスのマッピング
-    const companiesToRestore = backupFiles.map((fileInfo) => {
-      // Firebase Storageは常に/区切りなので、path.sepではなく/で分割
-      const parts = fileInfo.path.split("/");
-      const companyId = parts[parts.indexOf("companies") + 1];
-      return {
-        companyId,
-        backupFilePath: fileInfo.path,
-      };
-    });
+    const companyData = companyDoc.data();
+    const isMaintenanceMode = companyData.maintenanceMode === true;
 
-    console.log(
-      `📊 ${companiesToRestore.length} 社のバックアップが見つかりました。\n`
+    if (!isMaintenanceMode) {
+      console.log("\n❌ メンテナンスモードが有効になっていません。");
+      console.log(
+        "⚠️  リストア作業中はユーザーの操作を排他する必要があります。"
+      );
+      console.log("\nメンテナンスモードを有効化してから再実行してください:");
+      console.log(`   npm run cli companies maintenance-on ${companyId}\n`);
+      return { success: false, reason: "maintenance-mode-required" };
+    }
+
+    console.log("✅ メンテナンスモード: 有効");
+
+    // 2. リストア対象のコレクションを取得
+    const targetCollections = options.collections
+      ? options.collections.split(",").map((c) => c.trim())
+      : [];
+
+    if (targetCollections.length === 0) {
+      console.log("\n❌ リストア対象のコレクションが指定されていません。");
+      console.log(
+        "--collections オプションでコレクション名を指定してください。"
+      );
+      console.log(`例: --collections Customers,Sites\n`);
+      return { success: false, reason: "no-collections-specified" };
+    }
+
+    // Authentication/Usersを除外
+    const excludedCollections = ["Users"];
+    const filteredCollections = targetCollections.filter(
+      (col) => !excludedCollections.includes(col)
     );
 
-    // 環境判定（本番環境かどうか）
-    const isProd =
-      process.env.FIREBASE_ENV === "prod" || options.env === "prod";
-
-    // 確認プロンプト（本番環境では2回）
-    const readline = require("readline").createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    // 1回目の確認
-    const shouldRestore = await new Promise((resolve) => {
-      readline.question(
-        `⚠️  ${companiesToRestore.length} 社のデータをリストアしますか？既存データは全て削除されます。 (yes/no): `,
-        (answer) => {
-          resolve(answer.toLowerCase() === "yes");
-        }
-      );
-    });
-
-    if (!shouldRestore) {
-      readline.close();
-      console.log("\n❌ リストアをキャンセルしました。");
-      return {
-        success: false,
-        cancelled: true,
-      };
+    if (filteredCollections.length !== targetCollections.length) {
+      console.log("\n⚠️  以下のコレクションは除外されました:");
+      targetCollections
+        .filter((col) => excludedCollections.includes(col))
+        .forEach((col) => console.log(`  - ${col} (Authentication/Users関連)`));
     }
 
-    // 本番環境の場合は2回目の確認
-    if (isProd) {
-      const shouldRestoreAgain = await new Promise((resolve) => {
-        readline.question(
-          `\n🚨 本番環境です！本当にリストアを実行しますか？この操作は取り消せません。 (yes/no): `,
-          (answer) => {
-            readline.close();
-            resolve(answer.toLowerCase() === "yes");
-          }
-        );
-      });
+    if (filteredCollections.length === 0) {
+      console.log("\n❌ リストア可能なコレクションがありません。\n");
+      return { success: false, reason: "no-valid-collections" };
+    }
 
-      if (!shouldRestoreAgain) {
-        console.log("\n❌ リストアをキャンセルしました。");
-        return {
-          success: false,
-          cancelled: true,
-        };
+    console.log("\n📋 リストア対象コレクション:");
+    filteredCollections.forEach((col) => console.log(`  - ${col}`));
+
+    // 3. バックアップファイルの選択
+    const backupPattern = getStoragePath(
+      "companies",
+      companyId,
+      "backup_*.json"
+    );
+    const backupFiles = await storage.list(backupPattern, {
+      includeMetadata: true,
+    });
+
+    if (backupFiles.length === 0) {
+      console.log(`\n❌ 会社 ${companyId} のバックアップが見つかりません。\n`);
+      return { success: false, reason: "no-backup-found" };
+    }
+
+    // 最新のバックアップを取得
+    const latestBackup = backupFiles.sort((a, b) =>
+      b.path.localeCompare(a.path)
+    )[0];
+
+    console.log(
+      `\n📦 バックアップファイル: ${path.basename(latestBackup.path)}`
+    );
+
+    // 4. バックアップデータを読み込み
+    const loaded = await storage.load(latestBackup.path);
+    const backupData = loaded.data;
+    const { subCollections } = backupData;
+
+    console.log(
+      `   バックアップ日時: ${new Date(backupData.backupDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+
+    // 5. リストア実行
+    console.log("\n📚 コレクションをリストア中...");
+    let restoredDocs = 0;
+    const restoredCollections = [];
+
+    for (const collection of COMPANY_SUBCOLLECTIONS) {
+      const collectionName = collection.name;
+
+      // 対象コレクションでない場合はスキップ
+      if (!filteredCollections.includes(collectionName)) {
+        continue;
       }
-    } else {
-      readline.close();
+
+      const documents = subCollections[collectionName];
+
+      if (!documents || documents.length === 0) {
+        console.log(`  ⏭️  ${collectionName}: バックアップにデータなし`);
+        continue;
+      }
+
+      console.log(`  📁 ${collectionName} (${documents.length}件)...`);
+
+      let batch = db.batch();
+      let batchCount = 0;
+
+      for (const doc of documents) {
+        const docRef = db
+          .collection(
+            `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
+          )
+          .doc(doc.docId);
+
+        const restoredData = convertStringsToTimestamps(doc.data);
+        batch.set(docRef, restoredData, { merge: true }); // マージモード
+        batchCount++;
+        restoredDocs++;
+
+        // Firestoreバッチは500件まで
+        if (batchCount >= 500) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+
+      console.log(`  ✅ ${collectionName}: ${documents.length}件リストア完了`);
+      restoredCollections.push(collectionName);
+
+      // Cloud Functions完了待機
+      if (collection.waitAfterRestore > 0) {
+        console.log(
+          `  ⏳ Cloud Functions処理待機中... (${collection.waitAfterRestore}ms)`
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, collection.waitAfterRestore)
+        );
+      }
     }
 
-    const results = {
+    console.log("\n✅ 選択的リストアが完了しました！");
+    console.log(`\n📈 リストア統計:`);
+    console.log(`  - 会社名: ${backupData.company.companyName}`);
+    console.log(
+      `  - リストアしたコレクション数: ${restoredCollections.length}`
+    );
+    console.log(`  - 総ドキュメント数: ${restoredDocs}`);
+    console.log(`\n📋 リストアしたコレクション:`);
+    restoredCollections.forEach((col) => console.log(`  - ${col}`));
+
+    console.log(`\n💡 次のステップ:`);
+    console.log(
+      `   メンテナンスモード解除: npm run cli companies maintenance-off ${companyId}\n`
+    );
+
+    return {
       success: true,
-      timestamp: timestamp,
-      totalCompanies: companiesToRestore.length,
-      successCount: 0,
-      failedCompanies: [],
-      restoredCompanies: [],
+      companyId: companyId,
+      companyName: backupData.company.companyName,
+      restoredCollections: restoredCollections,
+      restoredDocuments: restoredDocs,
+    };
+  } catch (error) {
+    console.error("\n❌ リストア中にエラーが発生しました:");
+    console.error(error.message);
+    throw error;
+  }
+}
+
+/**
+ * 差分ベースリストア
+ * 差分データ（added, modified, deleted）のみをリストア
+ * Authentication/Usersは除外される
+ */
+async function restoreDiff(companyId, options = {}) {
+  try {
+    const db = admin.firestore();
+    const storage = createStorageAdapterFromEnv(options.storage);
+
+    console.log(`\n🔧 差分ベースリストアを開始します (ID: ${companyId})`);
+
+    // 1. メンテナンスモード確認
+    console.log("\n🔍 メンテナンスモード状態を確認中...");
+    const companyDoc = await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
+      .get();
+
+    if (!companyDoc.exists) {
+      throw new Error(`会社ID ${companyId} が見つかりません。`);
+    }
+
+    const companyData = companyDoc.data();
+    const isMaintenanceMode = companyData.maintenanceMode === true;
+
+    if (!isMaintenanceMode) {
+      console.log("\n❌ メンテナンスモードが有効になっていません。");
+      console.log(
+        "⚠️  リストア作業中はユーザーの操作を排他する必要があります。"
+      );
+      console.log("\nメンテナンスモードを有効化してから再実行してください:");
+      console.log(`   npm run cli companies maintenance-on ${companyId}\n`);
+      return { success: false, reason: "maintenance-mode-required" };
+    }
+
+    console.log("✅ メンテナンスモード: 有効");
+
+    // 2. 差分データの確認
+    console.log("\n📊 差分データを確認中...");
+    const diffDir = getStoragePath("temporary", "companies", companyId, "diff");
+    const summaryPath = getStoragePath(diffDir, "summary.json");
+
+    const summaryExists = await storage.exists(summaryPath);
+    if (!summaryExists) {
+      console.log("\n❌ 差分データが見つかりません。");
+      console.log("先にスナップショットを取得してください:");
+      console.log(`   npm run cli backup snapshot ${companyId}\n`);
+      return { success: false, reason: "diff-not-found" };
+    }
+
+    const summaryData = await storage.load(summaryPath);
+    const summary = summaryData.data;
+
+    console.log("✅ 差分データ: 取得済み");
+    console.log(
+      `   スナップショット日時: ${new Date(summary.snapshotDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+    console.log(
+      `   バックアップ日時: ${new Date(summary.backupDate).toLocaleString(
+        "ja-JP"
+      )}`
+    );
+
+    // 3. リストア対象のコレクションを取得
+    const targetCollections = options.collections
+      ? options.collections.split(",").map((c) => c.trim())
+      : [];
+
+    if (targetCollections.length === 0) {
+      console.log("\n❌ リストア対象のコレクションが指定されていません。");
+      console.log(
+        "--collections オプションでコレクション名を指定してください。"
+      );
+      console.log(`例: --collections Customers,Sites\n`);
+      return { success: false, reason: "no-collections-specified" };
+    }
+
+    // Authentication/Usersを除外
+    const excludedCollections = ["Users"];
+    const filteredCollections = targetCollections.filter(
+      (col) => !excludedCollections.includes(col)
+    );
+
+    if (filteredCollections.length !== targetCollections.length) {
+      console.log("\n⚠️  以下のコレクションは除外されました:");
+      targetCollections
+        .filter((col) => excludedCollections.includes(col))
+        .forEach((col) => console.log(`  - ${col} (Authentication/Users関連)`));
+    }
+
+    if (filteredCollections.length === 0) {
+      console.log("\n❌ リストア可能なコレクションがありません。\n");
+      return { success: false, reason: "no-valid-collections" };
+    }
+
+    console.log("\n📋 リストア対象コレクション:");
+    filteredCollections.forEach((col) => console.log(`  - ${col}`));
+
+    // 4. 差分ベースでリストア実行
+    console.log("\n📚 差分データをリストア中...");
+    let totalRestored = 0;
+    const restoredCollections = [];
+    const stats = {
+      added: 0,
+      modified: 0,
+      deleted: 0,
     };
 
-    // 各会社をリストア（確認プロンプトをスキップ）
-    for (let i = 0; i < companiesToRestore.length; i++) {
-      const { companyId, backupFilePath } = companiesToRestore[i];
+    for (const collection of COMPANY_SUBCOLLECTIONS) {
+      const collectionName = collection.name;
 
-      // バックアップファイルから会社名を取得
-      let companyName = companyId;
-      try {
-        const loaded = await storage.load(backupFilePath);
-        companyName = loaded.data.company.companyName || companyId;
-      } catch {}
+      // 対象コレクションでない場合はスキップ
+      if (!filteredCollections.includes(collectionName)) {
+        continue;
+      }
+
+      // 差分ファイルの存在確認
+      const diffFilePath = getStoragePath(diffDir, `${collectionName}.json`);
+      const diffFileExists = await storage.exists(diffFilePath);
+
+      if (!diffFileExists) {
+        console.log(`  ⏭️  ${collectionName}: 差分なし`);
+        continue;
+      }
+
+      // 差分データを読み込み
+      const diffData = await storage.load(diffFilePath);
+      const { added, modified, deleted } = diffData.data;
+
+      const totalChanges = added.length + modified.length + deleted.length;
+      if (totalChanges === 0) {
+        console.log(`  ⏭️  ${collectionName}: 差分なし`);
+        continue;
+      }
 
       console.log(
-        `\n📦 [${i + 1}/${
-          companiesToRestore.length
-        }] ${companyName} (${companyId})`
+        `  📁 ${collectionName} (追加:${added.length}, 変更:${modified.length}, 削除:${deleted.length})...`
       );
-      console.log("─".repeat(60));
 
-      try {
-        // skipConfirmationオプションを追加して個別確認をスキップ
-        const result = await restoreCompany(backupFilePath, {
-          ...options,
-          skipConfirmation: true,
-        });
-        results.successCount++;
-        results.restoredCompanies.push({
-          companyId,
-          companyName,
-          success: true,
-        });
-      } catch (error) {
-        console.error(`❌ ${companyName} のリストアに失敗: ${error.message}`);
-        results.failedCompanies.push({
-          companyId,
-          companyName,
-          error: error.message,
-        });
+      let batch = db.batch();
+      let batchCount = 0;
+      let collectionRestored = 0;
+
+      // added: スナップショットから取得して書き込み
+      for (const doc of added) {
+        const docRef = db
+          .collection(
+            `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
+          )
+          .doc(doc.docId);
+
+        const restoredData = convertStringsToTimestamps(doc.data);
+        batch.set(docRef, restoredData);
+        batchCount++;
+        collectionRestored++;
+        stats.added++;
+
+        if (batchCount >= 500) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+
+      // modified: スナップショットから取得して書き込み
+      for (const doc of modified) {
+        const docRef = db
+          .collection(
+            `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
+          )
+          .doc(doc.docId);
+
+        const restoredData = convertStringsToTimestamps(doc.data);
+        batch.set(docRef, restoredData);
+        batchCount++;
+        collectionRestored++;
+        stats.modified++;
+
+        if (batchCount >= 500) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+
+      // deleted: バックアップから取得して書き込み（復元）
+      for (const doc of deleted) {
+        const docRef = db
+          .collection(
+            `${TOP_LEVEL_COLLECTIONS.COMPANIES}/${companyId}/${collectionName}`
+          )
+          .doc(doc.docId);
+
+        const restoredData = convertStringsToTimestamps(doc.data);
+        batch.set(docRef, restoredData);
+        batchCount++;
+        collectionRestored++;
+        stats.deleted++;
+
+        if (batchCount >= 500) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+
+      console.log(
+        `  ✅ ${collectionName}: ${collectionRestored}件リストア完了`
+      );
+      totalRestored += collectionRestored;
+      restoredCollections.push(collectionName);
+
+      // Cloud Functions完了待機
+      if (collection.waitAfterRestore > 0) {
+        console.log(
+          `  ⏳ Cloud Functions処理待機中... (${collection.waitAfterRestore}ms)`
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, collection.waitAfterRestore)
+        );
       }
     }
 
-    // サマリー表示
-    console.log("\n" + "═".repeat(60));
-    console.log("✅ 全会社のリストアが完了しました！");
-    console.log("═".repeat(60));
-    console.log(`\n📊 リストアサマリー:`);
-    console.log(`  - タイムスタンプ: ${timestamp}`);
-    console.log(`  - 対象会社数: ${results.totalCompanies} 社`);
-    console.log(`  - 成功: ${results.successCount} 社`);
-    console.log(`  - 失敗: ${results.failedCompanies.length} 社`);
+    console.log("\n✅ 差分ベースリストアが完了しました！");
+    console.log(`\n📈 リストア統計:`);
+    console.log(`  - 会社名: ${summary.companyName}`);
+    console.log(
+      `  - リストアしたコレクション数: ${restoredCollections.length}`
+    );
+    console.log(`  - 総ドキュメント数: ${totalRestored}`);
+    console.log(
+      `  - 内訳: 追加 ${stats.added}件, 変更 ${stats.modified}件, 削除復元 ${stats.deleted}件`
+    );
+    console.log(`\n📋 リストアしたコレクション:`);
+    restoredCollections.forEach((col) => console.log(`  - ${col}`));
 
-    if (results.failedCompanies.length > 0) {
-      console.log(`\n⚠️  失敗した会社:`);
-      results.failedCompanies.forEach((failed) => {
-        console.log(
-          `  - ${failed.companyName} (${failed.companyId}): ${failed.error}`
-        );
-      });
-    }
+    console.log(`\n💡 次のステップ:`);
+    console.log(
+      `   メンテナンスモード解除: npm run cli companies maintenance-off ${companyId}\n`
+    );
 
-    return results;
+    return {
+      success: true,
+      companyId: companyId,
+      companyName: summary.companyName,
+      restoredCollections: restoredCollections,
+      restoredDocuments: totalRestored,
+      stats: stats,
+    };
   } catch (error) {
-    console.error("\n❌ 全会社リストア中にエラーが発生しました:");
+    console.error("\n❌ リストア中にエラーが発生しました:");
     console.error(error.message);
     throw error;
   }
@@ -1101,9 +1829,9 @@ async function restoreAllCompanies(timestamp, options = {}) {
 
 module.exports = {
   backupCompany,
-  backupAllCompanies,
-  restoreCompany,
-  restoreCompanyInteractive,
-  restoreAllCompanies,
+  snapshotCompany,
+  diffBackup,
+  restoreSelective,
+  restoreDiff,
   listBackups,
 };

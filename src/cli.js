@@ -197,30 +197,88 @@ companiesCmd
   .action(async (companyId, cmdOptions, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
 
-    // 確認プロンプト
+    // 二重確認プロンプト
     if (!cmdOptions.force) {
       const readline = require("readline").createInterface({
         input: process.stdin,
         output: process.stdout,
       });
 
-      await new Promise((resolve) => {
+      // 第一確認
+      const firstConfirm = await new Promise((resolve) => {
         readline.question(
-          `\n⚠️  本当に会社 ${companyId} とそのすべてのデータを削除しますか？ (yes/no): `,
+          `\n⚠️  本当に会社 ${companyId} とそのすべてのデータを削除しますか？\n` +
+            `   この操作は取り消せません。\n` +
+            `   Authentication、Firestore、すべてのユーザーデータが完全に削除されます。\n` +
+            `   (yes/no): `,
           (answer) => {
-            readline.close();
-            if (answer.toLowerCase() === "yes") {
-              resolve();
-            } else {
-              console.log("\n❌ 操作がキャンセルされました。");
-              process.exit(0);
-            }
+            resolve(answer.toLowerCase() === "yes");
           }
         );
       });
+
+      if (!firstConfirm) {
+        readline.close();
+        console.log("\n❌ 操作がキャンセルされました。");
+        process.exit(0);
+      }
+
+      // 第二確認（会社IDの入力を要求）
+      const secondConfirm = await new Promise((resolve) => {
+        readline.question(
+          `\n🔴 最終確認: 削除する会社IDを入力してください（${companyId}）: `,
+          (answer) => {
+            readline.close();
+            resolve(answer === companyId);
+          }
+        );
+      });
+
+      if (!secondConfirm) {
+        console.log("\n❌ 会社IDが一致しません。操作をキャンセルしました。");
+        process.exit(0);
+      }
+
+      console.log("\n✅ 削除を実行します...");
     }
 
     await companiesCommands.deleteCompany(companyId, globalOpts);
+  });
+
+companiesCmd
+  .command("maintenance-on <companyId>")
+  .description("会社のメンテナンスモードを有効化（ユーザー操作を排他）")
+  .option("-r, --reason <reason>", "メンテナンス理由", "データ復旧作業中")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await companiesCommands.enableMaintenanceMode(companyId, {
+      ...globalOpts,
+      reason: cmdOptions.reason,
+    });
+  });
+
+companiesCmd
+  .command("maintenance-off <companyId>")
+  .description("会社のメンテナンスモードを解除")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await companiesCommands.disableMaintenanceMode(companyId, globalOpts);
+  });
+
+companiesCmd
+  .command("verify-users <companyId>")
+  .description("AuthenticationとUsersドキュメントの整合性を検証")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await companiesCommands.verifyUsers(companyId, globalOpts);
+  });
+
+companiesCmd
+  .command("repair-users <companyId>")
+  .description("欠損Usersドキュメントを修復（Authenticationアカウント削除）")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await companiesCommands.repairUsers(companyId, globalOpts);
   });
 
 // backup サブコマンド
@@ -241,12 +299,12 @@ backupCmd
   });
 
 backupCmd
-  .command("all")
-  .description("全会社のデータをバックアップ")
+  .command("snapshot <companyId>")
+  .description("現在状態をスナップショット取得（リストア前の差分確認用）")
   .option("-o, --output <dir>", "出力ディレクトリ", "./backups")
-  .action(async (cmdOptions, cmd) => {
+  .action(async (companyId, cmdOptions, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
-    await backupCommands.backupAllCompanies({
+    await backupCommands.snapshotCompany(companyId, {
       ...globalOpts,
       output: cmdOptions.output,
     });
@@ -254,29 +312,47 @@ backupCmd
 
 backupCmd
   .command("restore <companyId>")
-  .description("バックアップからリストア")
+  .description(
+    "差分ベースリストア（added/modified/deleted のみ、Authentication/Users除外）"
+  )
+  .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
   .option(
-    "-f, --file <backupFile>",
-    "バックアップファイルのパス（省略時は選択）"
+    "-c, --collections <collections>",
+    "リストア対象のコレクション（カンマ区切り）例: Customers,Sites"
   )
   .action(async (companyId, cmdOptions, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
-    if (cmdOptions.file) {
-      // ファイルパス指定時は直接リストア
-      await backupCommands.restoreCompany(cmdOptions.file, globalOpts);
-    } else {
-      // ファイルパス未指定時はインタラクティブ選択
-      await backupCommands.restoreCompanyInteractive(companyId, globalOpts);
-    }
+    await backupCommands.restoreDiff(companyId, {
+      ...globalOpts,
+      output: cmdOptions.output,
+      collections: cmdOptions.collections,
+    });
   });
 
 backupCmd
-  .command("restore-all <timestamp>")
-  .description("指定タイムスタンプから全会社をリストア")
+  .command("restore-full <companyId>")
+  .description("全ドキュメントリストア（バックアップ全体、緊急時用）")
   .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
-  .action(async (timestamp, cmdOptions, cmd) => {
+  .option(
+    "-c, --collections <collections>",
+    "リストア対象のコレクション（カンマ区切り）例: Customers,Sites"
+  )
+  .action(async (companyId, cmdOptions, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
-    await backupCommands.restoreAllCompanies(timestamp, {
+    await backupCommands.restoreSelective(companyId, {
+      ...globalOpts,
+      output: cmdOptions.output,
+      collections: cmdOptions.collections,
+    });
+  });
+
+backupCmd
+  .command("diff <companyId>")
+  .description("スナップショットと直近バックアップの差分を表示")
+  .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await backupCommands.diffBackup(companyId, {
       ...globalOpts,
       output: cmdOptions.output,
     });
