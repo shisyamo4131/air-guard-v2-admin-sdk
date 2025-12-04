@@ -14,12 +14,12 @@
 
 ### 🏷️ クレーム管理 (Claims)
 
-| コマンド                        | 説明                         | 引数               | 実装状況  |
-| ------------------------------- | ---------------------------- | ------------------ | --------- |
-| `claims set-superuser <uid>`    | スーパーユーザークレーム設定 | `uid`: ユーザー ID | 🚧 未実装 |
-| `claims remove-superuser <uid>` | スーパーユーザークレーム削除 | `uid`: ユーザー ID | 🚧 未実装 |
-| `claims set-developer <uid>`    | デベロッパークレーム設定     | `uid`: ユーザー ID | 🚧 未実装 |
-| `claims remove-developer <uid>` | デベロッパークレーム削除     | `uid`: ユーザー ID | 🚧 未実装 |
+| コマンド                        | 説明                         | 引数               | 実装状況    |
+| ------------------------------- | ---------------------------- | ------------------ | ----------- |
+| `claims set-superuser <uid>`    | スーパーユーザークレーム設定 | `uid`: ユーザー ID | ✅ 実装済み |
+| `claims remove-superuser <uid>` | スーパーユーザークレーム削除 | `uid`: ユーザー ID | ✅ 実装済み |
+| `claims set-developer <uid>`    | デベロッパークレーム設定     | `uid`: ユーザー ID | ✅ 実装済み |
+| `claims remove-developer <uid>` | デベロッパークレーム削除     | `uid`: ユーザー ID | ✅ 実装済み |
 
 ### ⚙️ システム管理 (System)
 
@@ -146,54 +146,113 @@ node src/cli.js --env emulator users get-uid test@local.com
 
 ### クレーム管理
 
-#### 🚧 スーパーユーザークレーム設定（未実装）
+#### ✅ スーパーユーザークレーム設定
 
 ```bash
 # スーパーユーザークレームを設定
-# npm run cli claims set-superuser abc123def456  # 🚧 未実装
-# npm run cli:emulator claims set-superuser abc123def456  # 🚧 未実装
+npm run cli claims set-superuser abc123def456
+npm run cli:emulator claims set-superuser abc123def456
 
 # 直接実行
-# node src/cli.js claims set-superuser abc123def456  # 🚧 未実装
-# node src/cli.js --env emulator claims set-superuser abc123def456  # 🚧 未実装
-````
+node src/cli.js claims set-superuser abc123def456
+node src/cli.js --env emulator claims set-superuser abc123def456
+```
 
-**注意**: このコマンドは将来実装予定です。現在は動作しません。
+**出力例:**
+```
+🔧 スーパーユーザークレームを設定中...
+UID: abc123def456
 
-#### 🚧 スーパーユーザークレーム削除（未実装）
+✅ スーパーユーザークレームを設定しました
+Email: admin@example.com
+カスタムクレーム: {
+  "isSuperUser": true,
+  "companyId": "company123"
+}
+
+⚠️  ユーザーは次回ログイン時に新しい権限が適用されます
+```
+
+#### ✅ スーパーユーザークレーム削除
 
 ```bash
 # スーパーユーザークレームを削除
-# npm run cli claims remove-superuser abc123def456  # 🚧 未実装
-# npm run cli:emulator claims remove-superuser abc123def456  # 🚧 未実装
+npm run cli claims remove-superuser abc123def456
+npm run cli:emulator claims remove-superuser abc123def456
+
+# 直接実行
+node src/cli.js claims remove-superuser abc123def456
+node src/cli.js --env emulator claims remove-superuser abc123def456
 ```
 
-**注意**: このコマンドは将来実装予定です。現在は動作しません。
+**出力例:**
+```
+🔧 スーパーユーザークレームを削除中...
+UID: abc123def456
 
-#### 🚧 デベロッパークレーム設定（未実装）
+✅ スーパーユーザークレームを削除しました
+Email: admin@example.com
+カスタムクレーム: {
+  "companyId": "company123"
+}
+
+⚠️  ユーザーは次回ログイン時に権限が更新されます
+```
+
+#### ✅ デベロッパークレーム設定
 
 ```bash
 # デベロッパークレームを設定
-# npm run cli claims set-developer abc123def456  # 🚧 未実装
-# npm run cli:emulator claims set-developer abc123def456  # 🚧 未実装
+npm run cli claims set-developer abc123def456
+npm run cli:emulator claims set-developer abc123def456
+
+# 直接実行
+node src/cli.js claims set-developer abc123def456
+node src/cli.js --env emulator claims set-developer abc123def456
 ```
 
-**注意**: このコマンドは将来実装予定です。現在は動作しません。
+**出力例:**
 
-#### 🚧 デベロッパークレーム削除（未実装）
+```
+🔧 開発者クレームを設定中...
+UID: abc123def456
+
+✅ 開発者クレームを設定しました
+Email: developer@example.com
+カスタムクレーム: {
+  "isDeveloper": true,
+  "companyId": "company123"
+}
+
+⚠️  ユーザーは次回ログイン時に新しい権限が適用されます
+```
+
+#### ✅ デベロッパークレーム削除
 
 ```bash
 # デベロッパークレームを削除
-# npm run cli claims remove-developer abc123def456  # 🚧 未実装
-# npm run cli:emulator claims remove-developer abc123def456  # 🚧 未実装
-```
-
-**注意**: このコマンドは将来実装予定です。現在は動作しません。bash
-
-# デベロッパークレームを削除
-
 npm run cli claims remove-developer abc123def456
 npm run cli:emulator claims remove-developer abc123def456
+
+# 直接実行
+node src/cli.js claims remove-developer abc123def456
+node src/cli.js --env emulator claims remove-developer abc123def456
+```
+
+**出力例:**
+
+```
+🔧 開発者クレームを削除中...
+UID: abc123def456
+
+✅ 開発者クレームを削除しました
+Email: developer@example.com
+カスタムクレーム: {
+  "companyId": "company123"
+}
+
+⚠️  ユーザーは次回ログイン時に権限が更新されます
+```
 
 ````
 
@@ -209,7 +268,7 @@ npm run cli:emulator system status
 # 直接実行
 node src/cli.js system status
 node src/cli.js --env emulator system status
-````
+```
 
 **出力例:**
 
