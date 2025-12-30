@@ -42,6 +42,7 @@ const claimsCommands = require("./commands/claims");
 const systemCommands = require("./commands/system");
 const companiesCommands = require("./commands/companies");
 const backupCommands = require("./commands/backup");
+const migrationCommands = require("./commands/migration");
 
 // プログラムの基本設定
 program
@@ -370,6 +371,15 @@ backupCmd
     });
   });
 
+// migration コマンド
+program
+  .command("migration")
+  .description("Geopoint マイグレーション処理（一度きりの実行）")
+  .action(async (options, cmd) => {
+    const globalOpts = cmd.parent.opts();
+    await migrationCommands.runGeopointMigration(globalOpts);
+  });
+
 // ヘルプの改善
 program.on("--help", () => {
   console.log("");
@@ -382,6 +392,7 @@ program.on("--help", () => {
   console.log("  $ npm run cli system maintenance-on");
   console.log("  $ npm run cli companies info <companyId>");
   console.log("  $ npm run cli:emulator companies delete <companyId>");
+  console.log("  $ npm run cli:emulator migration");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
@@ -390,6 +401,7 @@ program.on("--help", () => {
   console.log(
     "  $ node src/cli.js --env emulator companies delete <companyId>"
   );
+  console.log("  $ node src/cli.js --env emulator migration");
   console.log("");
 });
 

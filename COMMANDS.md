@@ -64,6 +64,14 @@
 | `backup list [companyId]`         | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社） | ✅ 実装済み |
 |                                   | オプション: `-o, --output` バックアップディレクトリ指定 |                                        |             |
 
+### 🔄 データマイグレーション (Migration)
+
+| コマンド    | 説明                                             | 引数 | 実装状況    |
+| ----------- | ------------------------------------------------ | ---- | ----------- |
+| `migration` | データ構造変更のための一度きりのマイグレーション | なし | ✅ 実装済み |
+|             | ⚠️ 必ず Emulator 環境でテスト後に本番実行        |      |             |
+|             | ⚠️ 冪等性あり（複数回実行しても安全）            |      |             |
+
 ## 🌟 基本的な使用方法
 
 ### 専用スクリプトを使用（推奨）
@@ -1027,4 +1035,92 @@ cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/Customers.json
 - バックアップ時: Firestore Timestamp → {\_timestamp: true, value: "ISO 文字列"}
 - リストア時: {\_timestamp: true, value: "ISO 文字列"} → Firestore Timestamp
 
-この形式により、JSON 形式で保存しながらも、リストア時にタイムスタンプ型を正確に復元できます。
+## この形式により、JSON 形式で保存しながらも、リストア時にタイムスタンプ型を正確に復元できます。
+
+## 🔄 データマイグレーション
+
+データ構造の変更が必要な場合に、一度きりのマイグレーション処理を実行します。
+
+### 基本的な使用方法
+
+```bash
+# Emulator環境でテスト（必須）
+npm run cli:emulator migration
+
+# 本番環境で実行（Emulatorで十分にテスト後）
+npm run cli migration
+```
+
+### 重要な注意事項
+
+⚠️ **マイグレーション実行前の確認事項:**
+
+1. **必ず Emulator 環境でテスト実行**
+
+   - 本番環境で実行する前に、必ず Emulator でテストしてください
+   - テストデータで期待通りの結果が得られることを確認
+
+2. **冪等性**
+
+   - マイグレーション処理は冪等性があり、複数回実行しても安全
+   - 既に処理済みのドキュメントはスキップされます
+
+3. **バックアップ推奨**
+
+   - 本番環境で実行する前に、必ずバックアップを取得してください
+   - `npm run cli backup company <companyId>` でバックアップ
+
+4. **処理内容の確認**
+   - マイグレーションスクリプト (`src/commands/migration.js`) を確認
+   - 何が変更されるのかを理解してから実行
+
+### 実行手順
+
+#### 1. Emulator 環境でテスト
+
+```bash
+# Emulatorを起動
+cd ../air-guard-v2
+npm run emulator
+
+# マイグレーションをテスト実行
+cd ../air-guard-v2-admin-sdk
+npm run cli:emulator migration
+```
+
+#### 2. 結果確認
+
+- Firestore Emulator UI (http://localhost:4000) で変更内容を確認
+- ログ出力で処理件数・スキップ件数を確認
+
+#### 3. 本番環境で実行
+
+```bash
+# 本番環境のバックアップを取得（全会社）
+npm run cli backup company <companyId>
+
+# マイグレーション実行
+npm run cli migration
+
+# 結果確認
+# - ログ出力を確認
+# - Firebase Console で変更内容を確認
+```
+
+### トラブルシューティング
+
+**エラーが発生した場合:**
+
+1. エラーメッセージを確認
+2. Emulator 環境で再現するか確認
+3. 必要に応じてマイグレーションスクリプトを修正
+4. 再度 Emulator でテスト
+
+**ロールバックが必要な場合:**
+
+```bash
+# バックアップからリストア
+npm run cli backup restore <companyId> --collections <対象コレクション>
+```
+
+---

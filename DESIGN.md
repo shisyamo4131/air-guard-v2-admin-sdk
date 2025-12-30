@@ -9,10 +9,11 @@
 3. [ユーザーロールとアクセス制御](#ユーザーロールとアクセス制御)
 4. [バックアップ・リストア機能](#バックアップリストア機能)
 5. [Authentication/Users 整合性管理](#authenticationusers-整合性管理)
-6. [データ移行機能](#データ移行機能)
-7. [環境構成](#環境構成)
-8. [Cloud Functions との連携](#cloud-functions-との連携)
-9. [技術的制約と注意事項](#技術的制約と注意事項)
+6. [データマイグレーション機能](#データマイグレーション機能)
+7. [データ移行機能](#データ移行機能)
+8. [環境構成](#環境構成)
+9. [Cloud Functions との連携](#cloud-functions-との連携)
+10. [技術的制約と注意事項](#技術的制約と注意事項)
 
 ---
 
@@ -446,6 +447,169 @@ async function importCustomers(jsonData) {
 
 - 運用・保守ツールとして完結
 - データ投入はアプリ側の責務
+
+---
+
+## データマイグレーション機能
+
+### 概要
+
+データ構造の変更が必要な場合に実行する、**一度きりのマイグレーション処理**を提供します。
+
+**決定内容:**
+
+- マイグレーションは `src/commands/migration.js` に実装
+- `npm run cli:emulator migration` で実行
+- 必ず Emulator 環境でテストしてから本番実行
+
+**実装日:** 2025-12-30
+
+---
+
+### 設計方針
+
+#### 1. 一度きりの実行
+
+**方針:**
+
+- マイグレーションは特定のデータ構造変更のために一度だけ実行
+- 実行後はコードを残すが、通常は再実行しない
+- 履歴として `src/commands/migration.js` に記録
+
+**理由:**
+
+- 繰り返し実行が必要な処理は通常のメンテナンス機能として実装すべき
+- マイグレーションの意図と実行履歴を明確にする
+
+#### 2. 冪等性の確保
+
+**方針:**
+
+- 複数回実行しても同じ結果になるよう実装
+- 既に処理済みのドキュメントはスキップ
+
+**理由:**
+
+- 途中でエラーが発生した場合でも安全に再実行可能
+- テスト実行と本番実行で同じスクリプトを使用できる
+
+**実装例:**
+
+```javascript
+// 既に処理済みかチェック
+if (data.geopoint) {
+  console.log(`既に処理済み、スキップ`);
+  return false;
+}
+// 処理を実行
+```
+
+#### 3. Emulator でのテスト必須
+
+**方針:**
+
+- 本番環境で実行する前に、必ず Emulator 環境でテスト
+- テストデータで期待通りの結果が得られることを確認
+
+**手順:**
+
+```bash
+# 1. Emulatorを起動
+cd ../air-guard-v2
+npm run emulator
+
+# 2. マイグレーションをテスト実行
+cd ../air-guard-v2-admin-sdk
+npm run cli:emulator migration
+
+# 3. Firestore Emulator UI で結果を確認
+# http://localhost:4000/firestore
+```
+
+#### 4. バックアップの取得
+
+**方針:**
+
+- 本番環境で実行する前に、必ず全会社のバックアップを取得
+
+**手順:**
+
+```bash
+# 各会社のバックアップを取得
+npm run cli backup company <companyId>
+```
+
+#### 5. ログ出力と進捗表示
+
+**方針:**
+
+- 処理対象コレクション、処理件数、スキップ件数を明確に出力
+- エラー発生時は詳細なエラーメッセージを表示
+
+**実装例:**
+
+```javascript
+console.log(`📂 [${collectionName}] 処理開始...`);
+console.log(`  ✅ [${collectionName}] ${doc.id}: 処理完了`);
+console.log(`  ⏭️  [${collectionName}] ${doc.id}: スキップ`);
+console.log(`📊 [${collectionName}] 完了: ${total} 件中 ${updated} 件更新`);
+```
+
+---
+
+### 実装ガイドライン
+
+#### マイグレーションスクリプトの構造
+
+```javascript
+// src/commands/migration.js
+const admin = require("../firebaseAdmin");
+
+async function runMigration() {
+  const db = admin.firestore();
+
+  // 1. Companies コレクション処理
+  // 2. 各会社のサブコレクション処理
+  // 3. 結果サマリー表示
+}
+
+module.exports = {
+  runMigration,
+};
+```
+
+#### CLI コマンドの追加
+
+```javascript
+// src/cli.js
+const migrationCommands = require("./commands/migration");
+
+program
+  .command("migration")
+  .description("データマイグレーション処理")
+  .action(async (options, cmd) => {
+    const globalOpts = cmd.parent.opts();
+    await migrationCommands.runMigration(globalOpts);
+  });
+```
+
+---
+
+### トラブルシューティング
+
+**エラーが発生した場合:**
+
+1. エラーメッセージとスタックトレースを確認
+2. Emulator 環境で同じエラーが再現するか確認
+3. 必要に応じてマイグレーションスクリプトを修正
+4. 再度 Emulator でテストしてから本番実行
+
+**ロールバックが必要な場合:**
+
+```bash
+# バックアップからリストア
+npm run cli backup restore <companyId> --collections <対象コレクション>
+```
 
 ---
 
