@@ -56,7 +56,7 @@ program
   .option(
     "--emulator-host <host>",
     "Firebase Auth Emulator host",
-    "localhost:9099"
+    "localhost:9099",
   );
 
 // users サブコマンド
@@ -214,7 +214,7 @@ companiesCmd
             `   (yes/no): `,
           (answer) => {
             resolve(answer.toLowerCase() === "yes");
-          }
+          },
         );
       });
 
@@ -231,7 +231,7 @@ companiesCmd
           (answer) => {
             readline.close();
             resolve(answer === companyId);
-          }
+          },
         );
       });
 
@@ -314,12 +314,12 @@ backupCmd
 backupCmd
   .command("restore <companyId>")
   .description(
-    "差分ベースリストア（added/modified/deleted のみ、Authentication/Users除外）"
+    "差分ベースリストア（added/modified/deleted のみ、Authentication/Users除外）",
   )
   .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
   .option(
     "-c, --collections <collections>",
-    "リストア対象のコレクション（カンマ区切り）例: Customers,Sites"
+    "リストア対象のコレクション（カンマ区切り）例: Customers,Sites",
   )
   .action(async (companyId, cmdOptions, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
@@ -336,7 +336,7 @@ backupCmd
   .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
   .option(
     "-c, --collections <collections>",
-    "リストア対象のコレクション（カンマ区切り）例: Customers,Sites"
+    "リストア対象のコレクション（カンマ区切り）例: Customers,Sites",
   )
   .action(async (companyId, cmdOptions, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
@@ -371,13 +371,37 @@ backupCmd
     });
   });
 
-// migration コマンド
-program
+// migration サブコマンド
+const migrationCmd = program
   .command("migration")
-  .description("Geopoint マイグレーション処理（一度きりの実行）")
+  .description("マイグレーション処理");
+
+migrationCmd
+  .command("geopoint")
+  .description("Geopoint マイグレーション処理")
   .action(async (options, cmd) => {
-    const globalOpts = cmd.parent.opts();
+    const globalOpts = cmd.parent.parent.opts();
     await migrationCommands.runGeopointMigration(globalOpts);
+  });
+
+migrationCmd
+  .command("agreement")
+  .description(
+    "Agreement → AgreementV2 マイグレーション（agreements → agreementsV2）",
+  )
+  .action(async (options, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await migrationCommands.runAgreementMigration(globalOpts);
+  });
+
+migrationCmd
+  .command("arrangement-notification")
+  .description(
+    "ArrangementNotification ドキュメントID マイグレーション（- → _）",
+  )
+  .action(async (options, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await migrationCommands.runArrangementNotificationMigration(globalOpts);
   });
 
 // ヘルプの改善
@@ -392,16 +416,18 @@ program.on("--help", () => {
   console.log("  $ npm run cli system maintenance-on");
   console.log("  $ npm run cli companies info <companyId>");
   console.log("  $ npm run cli:emulator companies delete <companyId>");
-  console.log("  $ npm run cli:emulator migration");
+  console.log("  $ npm run cli:emulator migration geopoint");
+  console.log("  $ npm run cli:emulator migration agreement");
+  console.log("  $ npm run cli:emulator migration arrangement-notification");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
   console.log("  $ node src/cli.js users get-uid user@example.com");
   console.log("  $ node src/cli.js --env emulator system status");
   console.log(
-    "  $ node src/cli.js --env emulator companies delete <companyId>"
+    "  $ node src/cli.js --env emulator companies delete <companyId>",
   );
-  console.log("  $ node src/cli.js --env emulator migration");
+  console.log("  $ node src/cli.js --env emulator migration geopoint");
   console.log("");
 });
 
