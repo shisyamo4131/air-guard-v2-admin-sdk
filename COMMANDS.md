@@ -47,22 +47,26 @@
 
 ### 💾 バックアップ・リストア (Backup)（⭐ NEW）
 
-| コマンド                          | 説明                                                    | 引数                                   | 実装状況    |
-| --------------------------------- | ------------------------------------------------------- | -------------------------------------- | ----------- |
-| `backup company <companyId>`      | 会社データをバックアップ（固定ファイル保存）            | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                                   | オプション: `-o, --output` 出力先指定                   |                                        |             |
-| `backup snapshot <companyId>`     | スナップショット取得（自動で差分計算実行）              | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                                   | 保存先: `temporary/companies/{companyId}/snapshot.json` |                                        |             |
-| `backup diff <companyId>`         | 差分計算（snapshot.json と最新バックアップを比較）      | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                                   | 出力先: `temporary/companies/{companyId}/diff/`         |                                        |             |
-| `backup restore <companyId>`      | 差分ベースリストア（変更されたドキュメントのみ）        | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                                   | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
-|                                   | ⚠️ メンテナンスモード必須                               |                                        |             |
-| `backup restore-full <companyId>` | フルバックアップリストア（全ドキュメント、緊急用）      | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                                   | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
-|                                   | ⚠️ メンテナンスモード必須                               |                                        |             |
-| `backup list [companyId]`         | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社） | ✅ 実装済み |
-|                                   | オプション: `-o, --output` バックアップディレクトリ指定 |                                        |             |
+| コマンド                              | 説明                                                    | 引数                                   | 実装状況    |
+| ------------------------------------- | ------------------------------------------------------- | -------------------------------------- | ----------- |
+| `backup company <companyId>`          | 会社データをバックアップ（固定ファイル保存）            | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | オプション: `-o, --output` 出力先指定                   |                                        |             |
+| `backup snapshot <companyId>`         | スナップショット取得（自動で差分計算実行）              | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | 保存先: `temporary/companies/{companyId}/snapshot.json` |                                        |             |
+| `backup diff <companyId>`             | 差分計算（snapshot.json と最新バックアップを比較）      | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | 出力先: `temporary/companies/{companyId}/diff/`         |                                        |             |
+| `backup restore <companyId>`          | 差分ベースリストア（変更されたドキュメントのみ）        | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
+|                                       | ⚠️ メンテナンスモード必須                               |                                        |             |
+| `backup restore-full <companyId>`     | フルバックアップリストア（全ドキュメント、緊急用）      | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
+|                                       | ⚠️ メンテナンスモード必須                               |                                        |             |
+| `backup restore-complete <companyId>` | 完全リストア（Firestore + Authentication）              | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | 最新バックアップから自動選択、全データ復元              |                                        |             |
+|                                       | 仮パスワード自動生成・ファイル保存                      |                                        |             |
+|                                       | オプション: `--skip-confirmation` 確認スキップ          |                                        |             |
+| `backup list [companyId]`             | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社） | ✅ 実装済み |
+|                                       | オプション: `-o, --output` バックアップディレクトリ指定 |                                        |             |
 
 ### 🔄 データマイグレーション (Migration)
 
@@ -641,6 +645,113 @@ npm run cli:dev backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections all
 
 - フルリストアでも Users コレクションは自動除外
 - Authentication 情報は変更されない
+
+##### 完全リストア（Authentication含む）⭐ NEW
+
+```bash
+# 最新バックアップから完全リストア（Firestore + Authentication）
+npm run cli:emulator backup restore-complete DU2gJlgO9HY1ny7xkA3m
+npm run cli:dev backup restore-complete DU2gJlgO9HY1ny7xkA3m
+
+# 確認スキップ（自動化用）
+npm run cli:emulator backup restore-complete DU2gJlgO9HY1ny7xkA3m --skip-confirmation
+```
+
+**機能:**
+
+- 最新バックアップファイルを自動選択（タイムスタンプソート）
+- Firestore全コレクション + Authenticationユーザーを完全復元
+- 既存データは自動削除（既存Authユーザー含む）
+- 異なる環境間でのリストア対応（Dev→Emulator等）
+- 仮パスワード自動生成（形式: `Temp{timestamp}{random}!`）
+- 仮パスワードをJSONファイルに保存（セキュリティ対応）
+
+**仮パスワードファイル保存先:**
+
+```
+backups/temporary/companies/{companyId}/restored_users_passwords.json
+```
+
+**ファイル構造:**
+
+```json
+{
+  "metadata": {
+    "savedAt": "2026-04-16T06:33:07.508Z",
+    "storage": "local"
+  },
+  "data": {
+    "restoredAt": "2026-04-16T06:33:07.506Z",
+    "companyId": "DU2gJlgO9HY1ny7xkA3m",
+    "companyName": "株式会社唯心",
+    "users": [
+      {
+        "email": "user@example.com",
+        "uid": "original-uid-preserved",
+        "tempPassword": "Temp177632118746178uqkwvi!"
+      }
+    ]
+  }
+}
+```
+
+**ユースケース:**
+
+1. **環境間データ移行**: Dev環境→Emulator環境への完全コピー
+2. **テストデータ準備**: 本番データをEmulatorで再現
+3. **障害復旧**: 完全なデータ復元（Auth含む）
+4. **会社データリセット**: 既存データを完全に置き換え
+
+**注意事項:**
+
+- ⚠️ 既存の会社データとAuthenticationユーザーは完全に削除されます
+- ⚠️ 元のUIDは保持されますが、パスワードは新規生成されます
+- ⚠️ ユーザーには必ずパスワードリセットを依頼してください
+- 📧 メールアドレス重複がある場合、事前に競合会社を削除してください
+
+**出力例:**
+
+```
+🔍 会社 DU2gJlgO9HY1ny7xkA3m の最新バックアップを検索中...
+✅ 最新バックアップ: backup_2026-04-16_14-55-04.json
+
+🔧 リストアを開始します
+📂 バックアップファイル: companies\DU2gJlgO9HY1ny7xkA3m\backup_2026-04-16_14-55-04.json
+
+🏢 会社情報:
+  - 会社名: 株式会社唯心
+  - 会社ID: DU2gJlgO9HY1ny7xkA3m
+  - バックアップ日時: 2026/4/16 14:55:07
+
+⚠️  環境の不一致を検出:
+  - リストア先環境: EMULATOR
+  - バックアップ元環境: DEV
+
+🗑️  既存データを削除中...
+📄 会社ドキュメントをリストア中...
+📚 サブコレクションをリストア中...
+  📁 Customers (4件)... ✅
+  📁 Sites (2件)... ✅
+  📁 Employees (4件)... ✅
+  ...
+
+👥 Authenticationユーザーをリストア中...
+  ⚙️  maruyama@yuisin.net を作成中...
+  ✅ maruyama@yuisin.net (仮パスワード: Temp177632118746178uqkwvi!)
+
+✅ リストアが完了しました！
+
+📈 リストア統計:
+  - 会社名: 株式会社唯心
+  - 総ドキュメント数: 32
+  - Authenticationユーザー数: 1/1
+
+🔑 リストアしたユーザーの仮パスワード:
+  - maruyama@yuisin.net: Temp177632118746178uqkwvi!
+
+💾 仮パスワードをファイルに保存しました:
+   backups/temporary/companies/DU2gJlgO9HY1ny7xkA3m/restored_users_passwords.json
+```
 
 #### バックアップ一覧の表示
 

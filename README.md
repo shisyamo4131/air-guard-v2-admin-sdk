@@ -8,7 +8,10 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 - **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除（🚧 未実装）
 - **システム管理**: メンテナンスモードの制御、システム設定管理 ✅
 - **会社管理**: 会社情報表示、ユーザー一覧、会社データ一括削除 ✅
-- **バックアップ・リストア**: 会社データの完全バックアップと復元 ✅
+- **バックアップ・リストア**: Firestore + Authentication の完全バックアップと復元 ✅
+  - 差分ベースリストア、フルリストア、完全リストア（Auth含む）をサポート
+  - 異なる環境間のデータ移行対応（Dev→Emulator等）
+  - 仮パスワード自動生成・ファイル保存
 - **データマイグレーション**: 一度きりのデータ構造変更処理 ✅
 - **環境対応**: Emulator・Dev・Prod 環境の切り替え対応 ✅
 - **CLI**: 統一されたコマンドラインインターフェース ✅
@@ -24,9 +27,17 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 ├── air-guard-v2-dev-firebase-adminsdk-fbsvc-f072726bf8.json # Dev環境の秘密鍵
 ├── air-guard-v2-prod-firebase-adminsdk-xxxxx.json # Prod環境の秘密鍵（将来追加）
 ├── backups/ # バックアップファイル保存先
-│ └── companies/
-│ └── {companyId}/
-│ └── backup_YYYY-MM-DD_HH-MM-SS.json
+│ ├── companies/
+│ │ └── {companyId}/
+│ │     └── backup_YYYY-MM-DD_HH-MM-SS.json # タイムスタンプ付きバックアップ
+│ └── temporary/
+│     └── companies/
+│         └── {companyId}/
+│             ├── snapshot.json # 差分計算用スナップショット
+│             ├── diff/ # 差分データ
+│             │   ├── summary.json
+│             │   └── {collection}.json
+│             └── restored_users_passwords.json # リストア時の仮パスワード
 └── src/
 ├── index.js # メインエクスポート（プログラマティック使用）
 ├── cli.js # CLIエントリーポイント
@@ -181,10 +192,23 @@ npm run cli:emulator backup diff <companyId>       # 差分計算（スタンド
 npm run cli:emulator backup restore <companyId> --collections Customers Sites  # 差分ベースリストア（推奨）
 npm run cli:emulator backup restore-full <companyId> --collections all        # フルバックアップリストア（緊急用）
 
+# 完全リストア（Authentication含む）⭐ NEW
+npm run cli:emulator backup restore-complete <companyId>  # Firestore + Auth完全復元
+                                                          # 仮パスワード自動生成・保存
+                                                          # 異なる環境間のデータ移行に最適
+
 # バックアップ一覧
 npm run cli:emulator backup list                   # 全バックアップ一覧
 npm run cli:emulator backup list <companyId>       # 会社のバックアップ一覧
 ```
+
+**完全リストアの特徴:**
+
+- Firestore全コレクション + Authenticationユーザーを完全復元
+- 最新バックアップを自動選択
+- 異なる環境間のデータ移行対応（Dev→Emulator等）
+- 仮パスワード自動生成・JSONファイル保存（`backups/temporary/companies/{companyId}/restored_users_passwords.json`）
+- 既存データ・Authユーザーは自動削除後にリストア
 
 詳細は COMMANDS.md をご覧ください。
 
@@ -407,7 +431,6 @@ cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/summary.json
 **整合性の問題と対処方法:**
 
 1. **孤立 Users ドキュメント**（Authentication に存在しない UID）
-
    - **対処**: 会社の Admin がアプリ上で対象ユーザーを削除し、再作成
    - Users ドキュメント削除時、Cloud Functions の onDelete トリガーで Authentication 自動削除
    - 新規ユーザーとして招待・作成することで整合性を復旧

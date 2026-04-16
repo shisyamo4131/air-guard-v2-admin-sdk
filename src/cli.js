@@ -371,6 +371,22 @@ backupCmd
     });
   });
 
+backupCmd
+  .command("restore-complete <companyId>")
+  .description(
+    "完全リストア（Authentication含む、会社データ全体、既存データは削除）",
+  )
+  .option("-o, --output <dir>", "バックアップディレクトリ", "./backups")
+  .option("--skip-confirmation", "確認プロンプトをスキップ")
+  .action(async (companyId, cmdOptions, cmd) => {
+    const globalOpts = cmd.parent.parent.opts();
+    await backupCommands.restoreCompanyFromLatestBackup(companyId, {
+      ...globalOpts,
+      output: cmdOptions.output,
+      skipConfirmation: cmdOptions.skipConfirmation,
+    });
+  });
+
 // migration サブコマンド
 const migrationCmd = program
   .command("migration")
