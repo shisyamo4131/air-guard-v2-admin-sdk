@@ -66,11 +66,13 @@
 
 ### 🔄 データマイグレーション (Migration)
 
-| コマンド    | 説明                                             | 引数 | 実装状況    |
-| ----------- | ------------------------------------------------ | ---- | ----------- |
-| `migration` | データ構造変更のための一度きりのマイグレーション | なし | ✅ 実装済み |
-|             | ⚠️ 必ず Emulator 環境でテスト後に本番実行        |      |             |
-|             | ⚠️ 冪等性あり（複数回実行しても安全）            |      |             |
+| コマンド                             | 説明                                                  | 引数 | 実装状況    |
+| ------------------------------------ | ----------------------------------------------------- | ---- | ----------- |
+| `migration geopoint`                 | Geopointマイグレーション処理                          | なし | ✅ 実装済み |
+| `migration agreement`                | Agreement → AgreementV2マイグレーション               | なし | ✅ 実装済み |
+| `migration arrangement-notification` | ArrangementNotificationドキュメントIDマイグレーション | なし | ✅ 実装済み |
+|                                      | ⚠️ 必ず Emulator 環境でテスト後に本番実行             |      |             |
+|                                      | ⚠️ 冪等性あり（複数回実行しても安全）                 |      |             |
 
 ## 🌟 基本的な使用方法
 
@@ -1044,11 +1046,17 @@ cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/Customers.json
 ### 基本的な使用方法
 
 ```bash
-# Emulator環境でテスト（必須）
-npm run cli:emulator migration
+# Geopointマイグレーション
+npm run cli:emulator migration geopoint      # Emulator環境でテスト
+npm run cli migration geopoint                # 本番環境で実行
 
-# 本番環境で実行（Emulatorで十分にテスト後）
-npm run cli migration
+# Agreement → AgreementV2マイグレーション
+npm run cli:emulator migration agreement     # Emulator環境でテスト
+npm run cli migration agreement               # 本番環境で実行
+
+# ArrangementNotificationドキュメントIDマイグレーション
+npm run cli:emulator migration arrangement-notification  # Emulator環境でテスト
+npm run cli migration arrangement-notification           # 本番環境で実行
 ```
 
 ### 重要な注意事項
@@ -1056,17 +1064,14 @@ npm run cli migration
 ⚠️ **マイグレーション実行前の確認事項:**
 
 1. **必ず Emulator 環境でテスト実行**
-
    - 本番環境で実行する前に、必ず Emulator でテストしてください
    - テストデータで期待通りの結果が得られることを確認
 
 2. **冪等性**
-
    - マイグレーション処理は冪等性があり、複数回実行しても安全
    - 既に処理済みのドキュメントはスキップされます
 
 3. **バックアップ推奨**
-
    - 本番環境で実行する前に、必ずバックアップを取得してください
    - `npm run cli backup company <companyId>` でバックアップ
 
@@ -1083,9 +1088,9 @@ npm run cli migration
 cd ../air-guard-v2
 npm run emulator
 
-# マイグレーションをテスト実行
+# マイグレーションをテスト実行（例: Agreement → AgreementV2）
 cd ../air-guard-v2-admin-sdk
-npm run cli:emulator migration
+npm run cli:emulator migration agreement
 ```
 
 #### 2. 結果確認
@@ -1099,8 +1104,8 @@ npm run cli:emulator migration
 # 本番環境のバックアップを取得（全会社）
 npm run cli backup company <companyId>
 
-# マイグレーション実行
-npm run cli migration
+# マイグレーション実行（例: Agreement → AgreementV2）
+npm run cli migration agreement
 
 # 結果確認
 # - ログ出力を確認
