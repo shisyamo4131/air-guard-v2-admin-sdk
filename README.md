@@ -49,7 +49,8 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 ├── claims.js # クレーム管理機能
 ├── system.js # システム管理機能
 ├── companies.js # 会社管理機能
-└── backup.js # バックアップ・リストア機能（⭐ NEW）
+├── backup.js # バックアップ・リストア機能（⭐ NEW）
+└── migration.js # データマイグレーション機能
 ```
 
 ## 🛠️ インストール・セットアップ

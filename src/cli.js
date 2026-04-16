@@ -393,31 +393,11 @@ const migrationCmd = program
   .description("マイグレーション処理");
 
 migrationCmd
-  .command("geopoint")
-  .description("Geopoint マイグレーション処理")
+  .command("customer-abbreviation")
+  .description("Customer abbreviation マイグレーション（name → abbreviation）")
   .action(async (options, cmd) => {
     const globalOpts = cmd.parent.parent.opts();
-    await migrationCommands.runGeopointMigration(globalOpts);
-  });
-
-migrationCmd
-  .command("agreement")
-  .description(
-    "Agreement → AgreementV2 マイグレーション（agreements → agreementsV2）",
-  )
-  .action(async (options, cmd) => {
-    const globalOpts = cmd.parent.parent.opts();
-    await migrationCommands.runAgreementMigration(globalOpts);
-  });
-
-migrationCmd
-  .command("arrangement-notification")
-  .description(
-    "ArrangementNotification ドキュメントID マイグレーション（- → _）",
-  )
-  .action(async (options, cmd) => {
-    const globalOpts = cmd.parent.parent.opts();
-    await migrationCommands.runArrangementNotificationMigration(globalOpts);
+    await migrationCommands.runCustomerAbbreviationMigration(globalOpts);
   });
 
 // ヘルプの改善
@@ -432,9 +412,9 @@ program.on("--help", () => {
   console.log("  $ npm run cli system maintenance-on");
   console.log("  $ npm run cli companies info <companyId>");
   console.log("  $ npm run cli:emulator companies delete <companyId>");
-  console.log("  $ npm run cli:emulator migration geopoint");
   console.log("  $ npm run cli:emulator migration agreement");
   console.log("  $ npm run cli:emulator migration arrangement-notification");
+  console.log("  $ npm run cli:emulator migration customer-abbreviation");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
@@ -443,7 +423,9 @@ program.on("--help", () => {
   console.log(
     "  $ node src/cli.js --env emulator companies delete <companyId>",
   );
-  console.log("  $ node src/cli.js --env emulator migration geopoint");
+  console.log(
+    "  $ node src/cli.js --env emulator migration customer-abbreviation",
+  );
   console.log("");
 });
 
