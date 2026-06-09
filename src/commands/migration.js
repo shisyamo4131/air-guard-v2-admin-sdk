@@ -5,12 +5,46 @@
 
 const admin = require("../firebaseAdmin");
 
+/*****************************************************************************
+ * FireModel と ServerAdapter のセットアップ
+ *****************************************************************************/
+const FireModel = require("@shisyamo4131/air-firebase-v2").default;
+const ServerAdapter =
+  require("@shisyamo4131/air-firebase-v2-server-adapter").default;
+
+FireModel.setAdapter(new ServerAdapter(admin.firestore()));
+
+/*****************************************************************************
+ * schemas パッケージが利用できるかの確認用コード
+ *****************************************************************************/
+const { Customer } = require("@shisyamo4131/air-guard-v2-schemas");
+
+async function test() {
+  const customer = new Customer();
+
+  console.log("instance created");
+
+  const exists = await customer.fetch({
+    prefix: "Companies/DU2gJlgO9HY1ny7xkA3m/",
+    docId: "LJ60NXbuJEj002mvP3eb",
+  });
+
+  console.log({ exists });
+}
+
+/*****************************************************************************
+ * EXPORTS
+ *****************************************************************************/
 module.exports = {
   runMigration,
   // runCustomerAbbreviationMigration,
 };
 
-function runMigration() {
+/*****************************************************************************
+ * MAIN MODULE
+ *****************************************************************************/
+async function runMigration() {
+  await test();
   throw new Error("マイグレーション処理は現在定義されていません。");
 }
 

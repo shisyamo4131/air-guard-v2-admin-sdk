@@ -12,13 +12,19 @@
     "backup:local:dev": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=local node src/cli.js backup",
     "backup:firebase:dev": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=firebase node src/cli.js backup",
     "backup:local:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=local node src/cli.js --env emulator backup",
-    "backup:firebase:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=firebase node src/cli.js --env emulator backup"
+    "backup:firebase:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=firebase node src/cli.js --env emulator backup",
+    "install:firemodel": "npm install @shisyamo4131/air-firebase-v2@dev",
+    "install:adapter": "npm install @shisyamo4131/air-firebase-v2-server-adapter@dev",
+    "install:schemas@dev": "npm install @shisyamo4131/air-guard-v2-schemas@dev"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@shisyamo4131/air-firebase-v2": "^2.3.1-dev.4",
+    "@shisyamo4131/air-firebase-v2-server-adapter": "^2.2.1-dev.0",
+    "@shisyamo4131/air-guard-v2-schemas": "^2.4.2-dev.136",
     "commander": "^14.0.1",
     "firebase-admin": "^13.3.0",
     "glob": "^13.0.0",
