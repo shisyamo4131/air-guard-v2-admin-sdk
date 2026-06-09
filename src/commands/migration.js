@@ -1,18 +1,22 @@
 ﻿/**
  * @file src/commands/migration.js
  * @description マイグレーション処理
- *
- * - Customer abbreviation マイグレーション
  */
 
 const admin = require("../firebaseAdmin");
 
 module.exports = {
-  runCustomerAbbreviationMigration,
+  runMigration,
+  // runCustomerAbbreviationMigration,
 };
+
+function runMigration() {
+  throw new Error("マイグレーション処理は現在定義されていません。");
+}
 
 // ============================================================================
 // Customer abbreviation マイグレーション
+// ※参考コードとして残していますが、現時点では実行されません。
 // ============================================================================
 
 /**

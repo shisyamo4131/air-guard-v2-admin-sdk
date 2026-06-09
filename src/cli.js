@@ -390,14 +390,10 @@ backupCmd
 // migration サブコマンド
 const migrationCmd = program
   .command("migration")
-  .description("マイグレーション処理");
-
-migrationCmd
-  .command("customer-abbreviation")
-  .description("Customer abbreviation マイグレーション（name → abbreviation）")
+  .description("マイグレーション処理")
   .action(async (options, cmd) => {
-    const globalOpts = cmd.parent.parent.opts();
-    await migrationCommands.runCustomerAbbreviationMigration(globalOpts);
+    const globalOpts = cmd.parent.opts();
+    await migrationCommands.runMigration(globalOpts);
   });
 
 // ヘルプの改善
@@ -412,9 +408,7 @@ program.on("--help", () => {
   console.log("  $ npm run cli system maintenance-on");
   console.log("  $ npm run cli companies info <companyId>");
   console.log("  $ npm run cli:emulator companies delete <companyId>");
-  console.log("  $ npm run cli:emulator migration agreement");
-  console.log("  $ npm run cli:emulator migration arrangement-notification");
-  console.log("  $ npm run cli:emulator migration customer-abbreviation");
+  console.log("  $ npm run cli:emulator migration");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
@@ -423,9 +417,7 @@ program.on("--help", () => {
   console.log(
     "  $ node src/cli.js --env emulator companies delete <companyId>",
   );
-  console.log(
-    "  $ node src/cli.js --env emulator migration customer-abbreviation",
-  );
+  console.log("  $ node src/cli.js --env emulator migration");
   console.log("");
 });
 
