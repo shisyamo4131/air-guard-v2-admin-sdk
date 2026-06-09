@@ -17,36 +17,40 @@ FireModel.setAdapter(new ServerAdapter(admin.firestore()));
 /*****************************************************************************
  * schemas パッケージが利用できるかの確認用コード
  *****************************************************************************/
-const { Customer } = require("@shisyamo4131/air-guard-v2-schemas");
+// const { Customer } = require("@shisyamo4131/air-guard-v2-schemas");
 
-async function test() {
-  const customer = new Customer();
+// async function test() {
+//   const customer = new Customer();
 
-  console.log("instance created");
+//   console.log("instance created");
 
-  const exists = await customer.fetch({
-    prefix: "Companies/DU2gJlgO9HY1ny7xkA3m/",
-    docId: "LJ60NXbuJEj002mvP3eb",
-  });
+//   const exists = await customer.fetch({
+//     prefix: "Companies/DU2gJlgO9HY1ny7xkA3m/",
+//     docId: "LJ60NXbuJEj002mvP3eb",
+//   });
 
-  console.log({ exists });
-}
+//   console.log({ exists });
+// }
 
 /*****************************************************************************
- * EXPORTS
+ * MODULE IMPORT
  *****************************************************************************/
-module.exports = {
-  runMigration,
-  // runCustomerAbbreviationMigration,
-};
+const {
+  syncOperationResultToDailyAttendances,
+} = require("../../../air-guard-v2/functions/modules/dailyAttendances/syncOperationResultToDailyAttendances.js");
 
 /*****************************************************************************
  * MAIN MODULE
  *****************************************************************************/
 async function runMigration() {
-  await test();
+  console.log(typeof syncOperationResultToDailyAttendances === "function");
   throw new Error("マイグレーション処理は現在定義されていません。");
 }
+
+/*****************************************************************************
+ * EXPORTS
+ *****************************************************************************/
+module.exports = { runMigration };
 
 // ============================================================================
 // Customer abbreviation マイグレーション
