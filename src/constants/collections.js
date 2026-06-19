@@ -17,6 +17,12 @@
  */
 const COMPANY_SUBCOLLECTIONS = [
   {
+    name: "Articles",
+    waitAfterClear: 0,
+    waitAfterRestore: 0,
+    description: "商品マスタ",
+  },
+  {
     name: "Customers",
     waitAfterClear: 3000, // Sitesへの伝播待機
     waitAfterRestore: 5000, // コールドスタート考慮
