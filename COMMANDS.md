@@ -628,6 +628,8 @@ npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m --collections all
 
 ##### フルバックアップリストア（緊急用）
 
+**リストア時は必ず Cloud Functions の同期処理が稼働しないようにすること！！！**
+
 ```bash
 # 全ドキュメントをバックアップからリストア（非効率、緊急時用）
 npm run cli:emulator backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites

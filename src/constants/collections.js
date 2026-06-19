@@ -24,8 +24,8 @@ const COMPANY_SUBCOLLECTIONS = [
   },
   {
     name: "Customers",
-    waitAfterClear: 3000, // Sitesへの伝播待機
-    waitAfterRestore: 5000, // コールドスタート考慮
+    waitAfterClear: 0,
+    waitAfterRestore: 0,
     description: "取引先マスタ（Sitesトリガー元）",
   },
   {
@@ -78,15 +78,21 @@ const COMPANY_SUBCOLLECTIONS = [
   },
   {
     name: "OperationResults",
-    waitAfterClear: 3000, // Billings同期待機
-    waitAfterRestore: 5000, // コールドスタート考慮
-    description: "稼働実績（Billingsトリガー元）",
+    waitAfterClear: 0,
+    waitAfterRestore: 0,
+    description: "稼働実績（Billings, DailyAttendancesトリガー元）",
   },
   {
     name: "Billings",
     waitAfterClear: 0,
     waitAfterRestore: 0,
     description: "請求データ（OperationResultsから自動生成）",
+  },
+  {
+    name: "DailyAttendances",
+    waitAfterClear: 0,
+    waitAfterRestore: 0,
+    description: "日次出勤データ（OperationResultsから自動生成）",
   },
   {
     name: "ArrangementNotifications",
