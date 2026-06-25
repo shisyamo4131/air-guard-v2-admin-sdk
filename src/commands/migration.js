@@ -33,18 +33,18 @@ FireModel.setAdapter(new ServerAdapter(admin.firestore()));
 // }
 
 /*****************************************************************************
- * MODULE IMPORT
+ * MODULE IMPORT のサンプルコード
  *****************************************************************************/
-const {
-  syncOperationResultToDailyAttendances,
-} = require("../../../air-guard-v2/functions/modules/dailyAttendances/syncOperationResultToDailyAttendances.js");
+// const {
+//   syncOperationResultToDailyAttendances,
+// } = require("../../../air-guard-v2/functions/modules/dailyAttendances/syncOperationResultToDailyAttendances.js");
 
 /*****************************************************************************
  * MAIN MODULE
  *****************************************************************************/
 async function runMigration() {
-  console.log(typeof syncOperationResultToDailyAttendances === "function");
-  throw new Error("マイグレーション処理は現在定義されていません。");
+  // throw new Error("マイグレーション処理は現在定義されていません。");
+  await runEmployeeDisplayNameKanaMigration();
 }
 
 /*****************************************************************************
@@ -134,6 +134,81 @@ async function runCustomerAbbreviationMigration() {
     // 結果サマリー表示
     console.log("\n" + "=".repeat(60));
     console.log("📊 Customer abbreviation マイグレーション完了\n");
+    console.log("【処理結果サマリー】");
+    console.log(`  合計:       ${summary.total} 件`);
+    console.log(`  更新:       ${summary.updated} 件`);
+    console.log(`  スキップ:   ${summary.skipped} 件`);
+    console.log(`  エラー:     ${summary.errors} 件`);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`\n⏱️  処理時間: ${duration} 秒`);
+    console.log("=".repeat(60));
+  } catch (error) {
+    console.error("\n❌ マイグレーション失敗:", error);
+    throw error;
+  }
+}
+
+/**
+ * Employee displayNameKana マイグレーション メイン処理
+ *
+ * すべての Companies/{companyId}/Employees ドキュメントの lastNameKana フィールドから
+ * displayNameKana フィールドを生成する。
+ */
+async function runEmployeeDisplayNameKanaMigration() {
+  console.log("🚀 Employee displayNameKana マイグレーション開始\n");
+  console.log("=".repeat(60));
+
+  const startTime = Date.now();
+  const summary = { total: 0, updated: 0, skipped: 0, errors: 0 };
+
+  try {
+    const db = admin.firestore();
+
+    // コレクショングループで全 Employees を取得
+    console.log("\n📂 全 Employees ドキュメント取得中...");
+    const employeesSnapshot = await db.collectionGroup("Employees").get();
+
+    if (employeesSnapshot.empty) {
+      console.log("  ℹ️  Employees ドキュメントなし");
+      console.log("\n" + "=".repeat(60));
+      console.log("📊 マイグレーション完了（処理対象なし）");
+      console.log("=".repeat(60));
+      return;
+    }
+
+    console.log(
+      `  ℹ️  ${employeesSnapshot.size} 件のドキュメントを処理します\n`,
+    );
+
+    for (const doc of employeesSnapshot.docs) {
+      summary.total++;
+      const data = doc.data();
+      const { lastNameKana } = data;
+
+      // lastNameKana がない場合はスキップ
+      if (!lastNameKana) {
+        console.log(`  ⏭️  ${doc.ref.path}: lastNameKana なし、スキップ`);
+        summary.skipped++;
+        continue;
+      }
+
+      try {
+        const displayNameKana = lastNameKana;
+        await doc.ref.update({ displayNameKana });
+        console.log(
+          `  ✅ ${doc.ref.path}: "${lastNameKana}" → "${displayNameKana}"`,
+        );
+        summary.updated++;
+      } catch (error) {
+        console.error(`  ❌ ${doc.ref.path}: エラー - ${error.message}`);
+        summary.errors++;
+      }
+    }
+
+    // 結果サマリー表示
+    console.log("\n" + "=".repeat(60));
+    console.log("📊 Employee displayNameKana マイグレーション完了\n");
     console.log("【処理結果サマリー】");
     console.log(`  合計:       ${summary.total} 件`);
     console.log(`  更新:       ${summary.updated} 件`);
