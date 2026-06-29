@@ -44,7 +44,7 @@ FireModel.setAdapter(new ServerAdapter(admin.firestore()));
  *****************************************************************************/
 async function runMigration() {
   // throw new Error("マイグレーション処理は現在定義されていません。");
-  await runEmployeeDisplayNameKanaMigration();
+  await runOperationSecurityTypeMigration();
 }
 
 /*****************************************************************************
@@ -216,6 +216,188 @@ async function runEmployeeDisplayNameKanaMigration() {
     console.log(`  エラー:     ${summary.errors} 件`);
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`\n⏱️  処理時間: ${duration} 秒`);
+    console.log("=".repeat(60));
+  } catch (error) {
+    console.error("\n❌ マイグレーション失敗:", error);
+    throw error;
+  }
+}
+
+/**
+ * Operation.securityType マイグレーション
+ *
+ * 対象:
+ *   - Companies/{companyId}/Sites
+ *   - Companies/{companyId}/SiteOperationSchedules
+ *   - Companies/{companyId}/OperationResults
+ *
+ * Sites.securityType が存在しない場合は "UNSET" を設定する。
+ * SiteOperationSchedules および OperationResults の securityType は、
+ * 対応する Site.securityType で更新する。
+ */
+async function runOperationSecurityTypeMigration() {
+  console.log("🚀 Operation.securityType マイグレーション開始\n");
+  console.log("=".repeat(60));
+
+  const startTime = Date.now();
+
+  const summary = {
+    sites: {
+      total: 0,
+      updated: 0,
+      errors: 0,
+    },
+    schedules: {
+      total: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+    },
+    results: {
+      total: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+    },
+  };
+
+  try {
+    const db = admin.firestore();
+
+    /**********************************************************************
+     * Sites
+     **********************************************************************/
+    console.log("\n📂 全 Sites ドキュメント取得中...");
+
+    const siteSnapshot = await db.collectionGroup("Sites").get();
+
+    const siteMap = new Map();
+
+    for (const doc of siteSnapshot.docs) {
+      summary.sites.total++;
+
+      const companyId = doc.ref.parent.parent.id;
+      const siteId = doc.id;
+
+      let { securityType } = doc.data();
+
+      if (!securityType) {
+        securityType = "UNSET";
+
+        try {
+          await doc.ref.update({ securityType });
+
+          console.log(`  ✅ ${doc.ref.path}: securityType = "UNSET" を追加`);
+
+          summary.sites.updated++;
+        } catch (error) {
+          console.error(`  ❌ ${doc.ref.path}: ${error.message}`);
+          summary.sites.errors++;
+          continue;
+        }
+      }
+
+      siteMap.set(`${companyId}/${siteId}`, securityType);
+    }
+
+    console.log(`  ℹ️  ${summary.sites.total} 件の Site を読み込みました。`);
+
+    /**********************************************************************
+     * SiteOperationSchedules
+     **********************************************************************/
+    console.log("\n📂 SiteOperationSchedules 更新中...");
+
+    const scheduleSnapshot = await db
+      .collectionGroup("SiteOperationSchedules")
+      .get();
+
+    for (const doc of scheduleSnapshot.docs) {
+      summary.schedules.total++;
+
+      const companyId = doc.ref.parent.parent.id;
+      const { siteId } = doc.data();
+
+      const securityType = siteMap.get(`${companyId}/${siteId}`);
+
+      if (!securityType) {
+        console.warn(`  ⏭️ ${doc.ref.path}: Site が見つからないためスキップ`);
+        summary.schedules.skipped++;
+        continue;
+      }
+
+      try {
+        await doc.ref.update({ securityType });
+
+        console.log(`  ✅ ${doc.ref.path}: securityType = "${securityType}"`);
+
+        summary.schedules.updated++;
+      } catch (error) {
+        console.error(`  ❌ ${doc.ref.path}: ${error.message}`);
+
+        summary.schedules.errors++;
+      }
+    }
+
+    /**********************************************************************
+     * OperationResults
+     **********************************************************************/
+    console.log("\n📂 OperationResults 更新中...");
+
+    const resultSnapshot = await db.collectionGroup("OperationResults").get();
+
+    for (const doc of resultSnapshot.docs) {
+      summary.results.total++;
+
+      const companyId = doc.ref.parent.parent.id;
+      const { siteId } = doc.data();
+
+      const securityType = siteMap.get(`${companyId}/${siteId}`);
+
+      if (!securityType) {
+        console.warn(`  ⏭️ ${doc.ref.path}: Site が見つからないためスキップ`);
+        summary.results.skipped++;
+        continue;
+      }
+
+      try {
+        await doc.ref.update({ securityType });
+
+        console.log(`  ✅ ${doc.ref.path}: securityType = "${securityType}"`);
+
+        summary.results.updated++;
+      } catch (error) {
+        console.error(`  ❌ ${doc.ref.path}: ${error.message}`);
+
+        summary.results.errors++;
+      }
+    }
+
+    /**********************************************************************
+     * サマリー
+     **********************************************************************/
+    console.log("\n" + "=".repeat(60));
+    console.log("📊 Operation.securityType マイグレーション完了\n");
+
+    console.log("【Sites】");
+    console.log(`  合計:       ${summary.sites.total} 件`);
+    console.log(`  更新:       ${summary.sites.updated} 件`);
+    console.log(`  エラー:     ${summary.sites.errors} 件`);
+
+    console.log("\n【SiteOperationSchedules】");
+    console.log(`  合計:       ${summary.schedules.total} 件`);
+    console.log(`  更新:       ${summary.schedules.updated} 件`);
+    console.log(`  スキップ:   ${summary.schedules.skipped} 件`);
+    console.log(`  エラー:     ${summary.schedules.errors} 件`);
+
+    console.log("\n【OperationResults】");
+    console.log(`  合計:       ${summary.results.total} 件`);
+    console.log(`  更新:       ${summary.results.updated} 件`);
+    console.log(`  スキップ:   ${summary.results.skipped} 件`);
+    console.log(`  エラー:     ${summary.results.errors} 件`);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
     console.log(`\n⏱️  処理時間: ${duration} 秒`);
     console.log("=".repeat(60));
   } catch (error) {
