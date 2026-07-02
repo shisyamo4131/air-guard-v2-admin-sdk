@@ -44,7 +44,7 @@ FireModel.setAdapter(new ServerAdapter(admin.firestore()));
  *****************************************************************************/
 async function runMigration() {
   // throw new Error("マイグレーション処理は現在定義されていません。");
-  await runOperationSecurityTypeMigration();
+  await runSiteConstructionPeriodMigration();
 }
 
 /*****************************************************************************
@@ -398,6 +398,92 @@ async function runOperationSecurityTypeMigration() {
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
+    console.log(`\n⏱️  処理時間: ${duration} 秒`);
+    console.log("=".repeat(60));
+  } catch (error) {
+    console.error("\n❌ マイグレーション失敗:", error);
+    throw error;
+  }
+}
+
+/**
+ * Site hasConstructionPeriod マイグレーション メイン処理
+ *
+ * すべての Companies/{companyId}/Sites ドキュメントに
+ * hasConstructionPeriodStartAt
+ * hasConstructionPeriodEndAt
+ * を追加・更新する。
+ */
+async function runSiteConstructionPeriodMigration() {
+  console.log("🚀 Site hasConstructionPeriod マイグレーション開始\n");
+  console.log("=".repeat(60));
+
+  const startTime = Date.now();
+  const summary = {
+    total: 0,
+    updated: 0,
+    skipped: 0,
+    errors: 0,
+  };
+
+  try {
+    const db = admin.firestore();
+
+    console.log("\n📂 全 Sites ドキュメント取得中...");
+    const snapshot = await db.collectionGroup("Sites").get();
+
+    if (snapshot.empty) {
+      console.log("  ℹ️  Sites ドキュメントなし");
+      return;
+    }
+
+    console.log(`  ℹ️  ${snapshot.size} 件のドキュメントを処理します\n`);
+
+    for (const doc of snapshot.docs) {
+      summary.total++;
+
+      const data = doc.data();
+
+      const updateData = {
+        hasConstructionPeriodStartAt: !!data.constructionPeriodStartAt,
+        hasConstructionPeriodEndAt: !!data.constructionPeriodEndAt,
+      };
+
+      // 既に値が一致している場合は更新しない
+      if (
+        data.hasConstructionPeriodStartAt ===
+          updateData.hasConstructionPeriodStartAt &&
+        data.hasConstructionPeriodEndAt ===
+          updateData.hasConstructionPeriodEndAt
+      ) {
+        console.log(`  ⏭️  ${doc.ref.path}: 更新不要`);
+        summary.skipped++;
+        continue;
+      }
+
+      try {
+        await doc.ref.update(updateData);
+
+        console.log(
+          `  ✅ ${doc.ref.path}: start=${updateData.hasConstructionPeriodStartAt}, end=${updateData.hasConstructionPeriodEndAt}`,
+        );
+
+        summary.updated++;
+      } catch (error) {
+        console.error(`  ❌ ${doc.ref.path}: ${error.message}`);
+        summary.errors++;
+      }
+    }
+
+    console.log("\n" + "=".repeat(60));
+    console.log("📊 Site hasConstructionPeriod マイグレーション完了\n");
+    console.log("【処理結果サマリー】");
+    console.log(`  合計:       ${summary.total} 件`);
+    console.log(`  更新:       ${summary.updated} 件`);
+    console.log(`  スキップ:   ${summary.skipped} 件`);
+    console.log(`  エラー:     ${summary.errors} 件`);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`\n⏱️  処理時間: ${duration} 秒`);
     console.log("=".repeat(60));
   } catch (error) {
