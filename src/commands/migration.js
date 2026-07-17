@@ -11,6 +11,13 @@ const admin = require("../firebaseAdmin");
 const FireModel = require("@shisyamo4131/air-firebase-v2").default;
 const ServerAdapter =
   require("@shisyamo4131/air-firebase-v2-server-adapter").default;
+const {
+  Article,
+  Customer,
+  Employee,
+  Outsourcer,
+  Site,
+} = require("@shisyamo4131/air-guard-v2-schemas");
 
 FireModel.setAdapter(new ServerAdapter(admin.firestore()));
 
@@ -44,13 +51,152 @@ FireModel.setAdapter(new ServerAdapter(admin.firestore()));
  *****************************************************************************/
 async function runMigration() {
   // throw new Error("マイグレーション処理は現在定義されていません。");
-  await runSiteConstructionPeriodMigration();
+  await runTokenMapMigration();
 }
 
 /*****************************************************************************
  * EXPORTS
  *****************************************************************************/
 module.exports = { runMigration };
+
+// ============================================================================
+// tokenMap マイグレーション
+// ============================================================================
+
+const TOKEN_MAP_MIGRATION_TARGETS = [
+  { collectionName: "Articles", Model: Article },
+  { collectionName: "Customers", Model: Customer },
+  { collectionName: "Employees", Model: Employee },
+  { collectionName: "Outsourcers", Model: Outsourcer },
+  { collectionName: "Sites", Model: Site },
+];
+
+/**
+ * 2つの tokenMap が同じ内容か確認します。
+ *
+ * @param {Object|null|undefined} currentTokenMap - 現在保存されている tokenMap
+ * @param {Object|null} nextTokenMap - スキーマから再生成した tokenMap
+ * @returns {boolean} 同じ内容の場合は true
+ */
+function tokenMapsAreEqual(currentTokenMap, nextTokenMap) {
+  if (currentTokenMap == null || nextTokenMap == null) {
+    return currentTokenMap == null && nextTokenMap == null;
+  }
+
+  if (
+    typeof currentTokenMap !== "object" ||
+    typeof nextTokenMap !== "object"
+  ) {
+    return false;
+  }
+
+  const currentKeys = Object.keys(currentTokenMap).sort();
+  const nextKeys = Object.keys(nextTokenMap).sort();
+
+  if (currentKeys.length !== nextKeys.length) return false;
+
+  return currentKeys.every(
+    (key, index) =>
+      key === nextKeys[index] &&
+      currentTokenMap[key] === nextTokenMap[key],
+  );
+}
+
+/**
+ * tokenFields が定義されている全スキーマについて tokenMap を再生成します。
+ * tokenMap 以外のフィールドは更新しません。
+ */
+async function runTokenMapMigration() {
+  console.log("🚀 tokenMap マイグレーション開始\n");
+  console.log("=".repeat(60));
+
+  const startTime = Date.now();
+  const db = admin.firestore();
+  const summary = {
+    total: 0,
+    updated: 0,
+    skipped: 0,
+    errors: 0,
+    collections: {},
+  };
+
+  try {
+    for (const { collectionName, Model } of TOKEN_MAP_MIGRATION_TARGETS) {
+      console.log(`\n📂 ${collectionName} ドキュメント取得中...`);
+
+      const snapshot = await db.collectionGroup(collectionName).get();
+      const collectionSummary = {
+        total: snapshot.size,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+      };
+      summary.collections[collectionName] = collectionSummary;
+      summary.total += snapshot.size;
+
+      if (snapshot.empty) {
+        console.log(`  ℹ️  ${collectionName} ドキュメントなし`);
+        continue;
+      }
+
+      console.log(`  ℹ️  ${snapshot.size} 件のドキュメントを処理します`);
+
+      for (const doc of snapshot.docs) {
+        try {
+          const data = doc.data();
+          const instance = new Model({
+            ...data,
+            docId: doc.id,
+          });
+          const nextTokenMap = instance.tokenMap;
+
+          if (tokenMapsAreEqual(data.tokenMap, nextTokenMap)) {
+            console.log(`  ⏭️  ${doc.ref.path}: 更新不要`);
+            collectionSummary.skipped++;
+            summary.skipped++;
+            continue;
+          }
+
+          await doc.ref.update({ tokenMap: nextTokenMap });
+
+          console.log(`  ✅ ${doc.ref.path}: tokenMap を更新`);
+          collectionSummary.updated++;
+          summary.updated++;
+        } catch (error) {
+          console.error(`  ❌ ${doc.ref.path}: ${error.message}`);
+          collectionSummary.errors++;
+          summary.errors++;
+        }
+      }
+    }
+
+    console.log("\n" + "=".repeat(60));
+    console.log("📊 tokenMap マイグレーション完了\n");
+
+    for (const [collectionName, result] of Object.entries(
+      summary.collections,
+    )) {
+      console.log(`【${collectionName}】`);
+      console.log(`  合計:       ${result.total} 件`);
+      console.log(`  更新:       ${result.updated} 件`);
+      console.log(`  スキップ:   ${result.skipped} 件`);
+      console.log(`  エラー:     ${result.errors} 件\n`);
+    }
+
+    console.log("【全体】");
+    console.log(`  合計:       ${summary.total} 件`);
+    console.log(`  更新:       ${summary.updated} 件`);
+    console.log(`  スキップ:   ${summary.skipped} 件`);
+    console.log(`  エラー:     ${summary.errors} 件`);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`\n⏱️  処理時間: ${duration} 秒`);
+    console.log("=".repeat(60));
+  } catch (error) {
+    console.error("\n❌ tokenMap マイグレーション失敗:", error);
+    throw error;
+  }
+}
 
 // ============================================================================
 // Customer abbreviation マイグレーション
