@@ -58,7 +58,11 @@ async function runMigration() {
 /*****************************************************************************
  * EXPORTS
  *****************************************************************************/
-module.exports = { runMigration, runBillingCalculationMigration };
+module.exports = {
+  runMigration,
+  runBillingCalculationMigration,
+  runBillingCalculationRetryMigration,
+};
 
 // ============================================================================
 // Billing 消費税計算バージョン マイグレーション
@@ -71,6 +75,21 @@ const OBSOLETE_OPERATION_RESULT_FIELDS = [
   "tax",
   "billingAmount",
   "unroundedTaxAmount",
+];
+const BILLING_CALCULATION_RETRY_VERSION = 2.1;
+const BILLING_CALCULATION_RETRY_WAIT_MS = 15000;
+const BILLING_CALCULATION_RETRY_TARGETS = [
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "UWdDWeiQgm0wdmZ5YkxQ" },
+  { companyId: "SAccpyGimr3ogHmkECj2", docId: "5dEi3x1QE0YD22SNB9xy" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "Px1m5g79l3OsUmdaBsSy" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "i4uDDmxhEhDrPNKupWVd" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "iOmd7cs3XRqUK358aMM5" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "PwCwlwza9HGaG0ACt8Sy" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "cyQTTJJAq2JrZ0aarpSg" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "58sHBo6S1KzhjkrKhXjK" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "NZs5LI5FAafQCX5hs6hk" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "YDBE5OvvDkMF1Kvg8f19" },
+  { companyId: "DU2gJlgO9HY1ny7xkA3m", docId: "TLxDpZ9iAPadxEyaerlF" },
 ];
 
 /**
@@ -178,6 +197,66 @@ async function runBillingCalculationMigration(
     target: targets.length,
     updated,
   };
+}
+
+/**
+ * Billing 再同期に失敗した OperationResult の更新トリガーを再実行します。
+ * 一時的な復旧処理のため、対象ドキュメントをコード上で固定しています。
+ *
+ * @param {Object} options
+ * @param {boolean} options.apply - true の場合のみ Firestore を更新
+ */
+async function runBillingCalculationRetryMigration({ apply = false } = {}) {
+  const db = admin.firestore();
+  const targets = await Promise.all(
+    BILLING_CALCULATION_RETRY_TARGETS.map(async ({ companyId, docId }) => {
+      const ref = db.doc(`Companies/${companyId}/OperationResults/${docId}`);
+      const snapshot = await ref.get();
+      return { companyId, docId, ref, exists: snapshot.exists };
+    }),
+  );
+  const missingTargets = targets.filter(({ exists }) => !exists);
+
+  console.log("\n🚑 Billing 再同期リトライマイグレーション");
+  console.log(`モード: ${apply ? "更新" : "ドライラン"}`);
+  console.log(`対象: ${targets.length}件`);
+  console.log(`存在確認済み: ${targets.length - missingTargets.length}件`);
+
+  if (missingTargets.length > 0) {
+    missingTargets.forEach(({ companyId, docId }) => {
+      console.error(`❌ 対象ドキュメントが存在しません: ${companyId}/${docId}`);
+    });
+    throw new Error("Retry target OperationResult was not found");
+  }
+
+  if (!apply) {
+    console.log(
+      "\nℹ️  ドライランのため更新していません。末尾に apply を指定すると更新します。",
+    );
+    return { mode: "dry-run", target: targets.length, updated: 0 };
+  }
+
+  let updated = 0;
+  for (const { companyId, docId, ref } of targets) {
+    await ref.update({
+      billingCalculationVersion: BILLING_CALCULATION_RETRY_VERSION,
+    });
+    updated++;
+    console.log(`✅ ${updated}/${targets.length}件 更新: ${companyId}/${docId}`);
+
+    if (updated < targets.length) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, BILLING_CALCULATION_RETRY_WAIT_MS),
+      );
+    }
+  }
+
+  console.log("\n✅ リトライ対象の書き込み完了");
+  console.log(
+    "OperationResult更新トリガーによる各同期処理の完了をFunctionsログで確認してください。",
+  );
+
+  return { mode: "apply", target: targets.length, updated };
 }
 
 // ============================================================================

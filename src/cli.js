@@ -415,6 +415,20 @@ migrationCmd
     });
   });
 
+migrationCmd
+  .command("billing-calculation-retry [mode]")
+  .description(
+    "Billing再同期に失敗したOperationResultのみを逐次更新する一時マイグレーション",
+  )
+  .action(async (mode) => {
+    if (mode && mode.toLowerCase() !== "apply") {
+      throw new Error("mode must be 'apply' or omitted");
+    }
+    await migrationCommands.runBillingCalculationRetryMigration({
+      apply: mode?.toLowerCase() === "apply",
+    });
+  });
+
 // ヘルプの改善
 program.on("--help", () => {
   console.log("");

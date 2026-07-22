@@ -74,6 +74,7 @@
 | --------------------------------- | ----------------------------------------- | ---- | ----------- |
 | `migration customer-abbreviation` | Customer abbreviationマイグレーション処理 | なし | ✅ 実装済み |
 | `migration billing-calculation [companyId] [apply]` | Billing税額計算バージョンの再同期（会社ID省略時は全会社、既定はドライラン） | なし | ✅ 実装済み |
+| `migration billing-calculation-retry [apply]` | Billing再同期に失敗した11件のOperationResultを逐次再更新する一時マイグレーション | なし | ✅ 実装済み |
 |                                   | name → abbreviation（株式会社等を削除）   |      |             |
 |                                   | ⚠️ 必ず Emulator 環境でテスト後に本番実行 |      |             |
 |                                   | ⚠️ 冪等性あり（複数回実行しても安全）     |      |             |
