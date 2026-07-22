@@ -15,6 +15,7 @@ const {
   Article,
   Customer,
   Employee,
+  OperationResult,
   Outsourcer,
   Site,
 } = require("@shisyamo4131/air-guard-v2-schemas");
@@ -57,7 +58,127 @@ async function runMigration() {
 /*****************************************************************************
  * EXPORTS
  *****************************************************************************/
-module.exports = { runMigration };
+module.exports = { runMigration, runBillingCalculationMigration };
+
+// ============================================================================
+// Billing 消費税計算バージョン マイグレーション
+// ============================================================================
+
+const BILLING_CALCULATION_VERSION = 2;
+const BILLING_MIGRATION_BATCH_SIZE = 300;
+const BILLING_MIGRATION_BATCH_WAIT_MS = 3000;
+const OBSOLETE_OPERATION_RESULT_FIELDS = [
+  "tax",
+  "billingAmount",
+  "unroundedTaxAmount",
+];
+
+/**
+ * OperationResult に billingCalculationVersion を設定して旧プロパティを削除し、
+ * OperationResult 更新トリガーによる Billing の再同期を要求します。
+ *
+ * @param {string|null} companyId - 対象会社ID。未指定の場合は全会社
+ * @param {Object} options
+ * @param {boolean} options.apply - true の場合のみ Firestore を更新
+ */
+async function runBillingCalculationMigration(
+  companyId = null,
+  { apply = false } = {},
+) {
+  if (companyId !== null && typeof companyId !== "string") {
+    throw new Error("companyId must be a string or null");
+  }
+
+  const db = admin.firestore();
+  const query = companyId
+    ? db.collection(`Companies/${companyId}/OperationResults`)
+    : db.collectionGroup("OperationResults");
+  const snapshot = await query.get();
+  const targets = snapshot.docs.filter((doc) => {
+    const data = doc.data();
+    return (
+      data.billingCalculationVersion !== BILLING_CALCULATION_VERSION ||
+      typeof data.taxRate !== "number" ||
+      OBSOLETE_OPERATION_RESULT_FIELDS.some((field) =>
+        Object.prototype.hasOwnProperty.call(data, field),
+      )
+    );
+  });
+
+  console.log("\n🚀 Billing 消費税計算バージョン マイグレーション");
+  console.log(`対象会社: ${companyId || "すべての会社"}`);
+  console.log(`モード: ${apply ? "更新" : "ドライラン"}`);
+  console.log(`OperationResult総数: ${snapshot.size}件`);
+  console.log(`更新対象: ${targets.length}件`);
+
+  if (!apply || targets.length === 0) {
+    if (!apply) {
+      console.log(
+        "\nℹ️  ドライランのため更新していません。末尾に apply を指定すると更新します。",
+      );
+    }
+    return {
+      companyId,
+      targetVersion: BILLING_CALCULATION_VERSION,
+      mode: apply ? "apply" : "dry-run",
+      total: snapshot.size,
+      target: targets.length,
+      updated: 0,
+    };
+  }
+
+  let updated = 0;
+  for (
+    let offset = 0;
+    offset < targets.length;
+    offset += BILLING_MIGRATION_BATCH_SIZE
+  ) {
+    const chunk = targets.slice(
+      offset,
+      offset + BILLING_MIGRATION_BATCH_SIZE,
+    );
+    const batch = db.batch();
+
+    chunk.forEach((doc) => {
+      const operationResult = new OperationResult({
+        ...doc.data(),
+        docId: doc.id,
+        billingCalculationVersion: BILLING_CALCULATION_VERSION,
+      });
+      const updateData = operationResult.toObject();
+
+      OBSOLETE_OPERATION_RESULT_FIELDS.forEach((field) => {
+        updateData[field] = admin.firestore.FieldValue.delete();
+      });
+
+      batch.set(doc.ref, updateData, { merge: true });
+    });
+
+    await batch.commit();
+    updated += chunk.length;
+    console.log(`✅ ${updated}/${targets.length}件 更新`);
+
+    if (updated < targets.length) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, BILLING_MIGRATION_BATCH_WAIT_MS),
+      );
+    }
+  }
+
+  console.log("\n✅ マイグレーション書き込み完了");
+  console.log(
+    "OperationResult更新トリガーによるBilling再同期の完了をFunctionsログで確認してください。",
+  );
+
+  return {
+    companyId,
+    targetVersion: BILLING_CALCULATION_VERSION,
+    mode: "apply",
+    total: snapshot.size,
+    target: targets.length,
+    updated,
+  };
+}
 
 // ============================================================================
 // tokenMap マイグレーション

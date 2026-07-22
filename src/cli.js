@@ -396,6 +396,25 @@ const migrationCmd = program
     await migrationCommands.runMigration(globalOpts);
   });
 
+migrationCmd
+  .command("billing-calculation [companyId] [mode]")
+  .description(
+    "OperationResultへbillingCalculationVersionを設定してBillingを再同期（会社ID省略時は全会社）",
+  )
+  .action(async (companyId, mode) => {
+    // 全会社へ適用する場合は companyId の位置に apply が渡される。
+    if (companyId?.toLowerCase() === "apply" && !mode) {
+      mode = companyId;
+      companyId = null;
+    }
+    if (mode && mode.toLowerCase() !== "apply") {
+      throw new Error("mode must be 'apply' or omitted");
+    }
+    await migrationCommands.runBillingCalculationMigration(companyId, {
+      apply: mode?.toLowerCase() === "apply",
+    });
+  });
+
 // ヘルプの改善
 program.on("--help", () => {
   console.log("");
