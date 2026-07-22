@@ -24,7 +24,7 @@
   "dependencies": {
     "@shisyamo4131/air-firebase-v2": "^2.3.1-dev.6",
     "@shisyamo4131/air-firebase-v2-server-adapter": "^2.2.1-dev.3",
-    "@shisyamo4131/air-guard-v2-schemas": "^2.4.2-dev.154",
+    "@shisyamo4131/air-guard-v2-schemas": "^2.4.2-dev.155",
     "commander": "^14.0.1",
     "firebase-admin": "^13.3.0",
     "glob": "^13.0.0",
