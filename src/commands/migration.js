@@ -62,7 +62,401 @@ module.exports = {
   runMigration,
   runBillingCalculationMigration,
   runBillingCalculationRetryMigration,
+  analyzeDailyAttendanceSelectiveRebuild,
+  runDailyAttendanceSelectiveRebuildMigration,
+  runDailyAttendanceRebuildMigration,
 };
+
+// ============================================================================
+// DailyAttendance 選択的再構築の事前調査
+// ============================================================================
+
+/**
+ * 旧形式の要素を含む DailyAttendance と、その再構築に必要な
+ * OperationResult を特定します。Firestore への書き込みは行いません。
+ *
+ * @returns {Promise<Object>}
+ */
+async function analyzeDailyAttendanceSelectiveRebuild() {
+  const db = admin.firestore();
+  const [dailyAttendancesSnapshot, operationResultsSnapshot] =
+    await Promise.all([
+      db.collectionGroup("DailyAttendances").get(),
+      db.collectionGroup("OperationResults").get(),
+    ]);
+
+  const oldDailyAttendances = dailyAttendancesSnapshot.docs.filter((doc) => {
+    const operationResults = doc.data().operationResults;
+    return (
+      Array.isArray(operationResults) &&
+      operationResults.some((item) => !isFullOperationResult(item))
+    );
+  });
+
+  const operationResultsByAttendance = new Map();
+
+  for (const doc of operationResultsSnapshot.docs) {
+    const companyId = doc.ref.parent.parent?.id;
+    if (!companyId) continue;
+
+    const operationResult = new OperationResult({
+      ...doc.data(),
+      docId: doc.id,
+    });
+
+    for (const employee of operationResult.employees ?? []) {
+      if (!employee.id || !employee.attendanceDate) continue;
+
+      const key = createAttendanceKey({
+        companyId,
+        employeeId: employee.id,
+        date: employee.attendanceDate,
+      });
+      const refs = operationResultsByAttendance.get(key) ?? new Map();
+      refs.set(doc.ref.path, doc.ref);
+      operationResultsByAttendance.set(key, refs);
+    }
+  }
+
+  const targetOperationResults = new Map();
+  const matchedDailyAttendances = [];
+  const unmatchedDailyAttendances = [];
+
+  for (const doc of oldDailyAttendances) {
+    const companyId = doc.ref.parent.parent?.id;
+    const { employeeId } = doc.data();
+    const date = getDailyAttendanceDate(doc);
+    const key =
+      companyId && employeeId && date
+        ? createAttendanceKey({ companyId, employeeId, date })
+        : null;
+    const refs = key ? operationResultsByAttendance.get(key) : null;
+
+    if (!refs?.size) {
+      unmatchedDailyAttendances.push({
+        path: doc.ref.path,
+        companyId: companyId ?? null,
+        employeeId: employeeId ?? null,
+        date,
+      });
+      continue;
+    }
+
+    const operationResultPaths = Array.from(refs.keys());
+    matchedDailyAttendances.push({
+      path: doc.ref.path,
+      operationResultPaths,
+    });
+    refs.forEach((ref, path) => targetOperationResults.set(path, ref));
+  }
+
+  const result = {
+    dailyAttendances: dailyAttendancesSnapshot.size,
+    operationResults: operationResultsSnapshot.size,
+    oldDailyAttendances: oldDailyAttendances.length,
+    matchedDailyAttendances: matchedDailyAttendances.length,
+    unmatchedDailyAttendances: unmatchedDailyAttendances.length,
+    targetOperationResults: targetOperationResults.size,
+    canApply:
+      oldDailyAttendances.length > 0 &&
+      unmatchedDailyAttendances.length === 0,
+    matched: matchedDailyAttendances,
+    unmatched: unmatchedDailyAttendances,
+    operationResultPaths: Array.from(targetOperationResults.keys()),
+  };
+
+  console.log("\n🔍 DailyAttendance 選択的再構築の事前調査");
+  console.log("対象会社: すべての会社");
+  console.log("モード: 読み取り専用");
+  console.log(`DailyAttendance総数: ${result.dailyAttendances}件`);
+  console.log(`OperationResult総数: ${result.operationResults}件`);
+  console.log(`旧形式DailyAttendance: ${result.oldDailyAttendances}件`);
+  console.log(`対応確認済みDailyAttendance: ${result.matchedDailyAttendances}件`);
+  console.log(`対応不能DailyAttendance: ${result.unmatchedDailyAttendances}件`);
+  console.log(`更新候補OperationResult: ${result.targetOperationResults}件`);
+  console.log(
+    `適用可否: ${result.canApply ? "適用可能" : "適用不可（Firestoreは変更していません）"}`,
+  );
+
+  if (result.unmatched.length > 0) {
+    console.log("\n⚠️  対応するOperationResultを特定できないDailyAttendance");
+    result.unmatched.forEach(({ path, employeeId, date }) => {
+      console.log(
+        `  - ${path} (employeeId: ${employeeId ?? "不明"}, date: ${date ?? "不明"})`,
+      );
+    });
+  }
+
+  if (result.operationResultPaths.length > 0) {
+    console.log("\n📋 更新候補OperationResult");
+    result.operationResultPaths.forEach((path) => console.log(`  - ${path}`));
+  }
+
+  console.log("\nℹ️  この処理ではFirestoreを変更していません。");
+  return result;
+}
+
+/**
+ * 旧形式の DailyAttendance だけを削除し、再構築に必要な OperationResult
+ * だけを逐次更新します。
+ *
+ * @param {Object} options
+ * @param {boolean} options.apply - true の場合のみ Firestore を更新
+ * @param {number} options.waitMs - OperationResult 1件ごとの更新待機時間
+ * @returns {Promise<Object>}
+ */
+async function runDailyAttendanceSelectiveRebuildMigration({
+  apply = false,
+  waitMs = 1000,
+} = {}) {
+  if (!Number.isInteger(waitMs) || waitMs < 0) {
+    throw new Error("waitMs must be a non-negative integer");
+  }
+
+  const analysis = await analyzeDailyAttendanceSelectiveRebuild();
+
+  if (!apply) {
+    console.log(
+      "\nℹ️  ドライランのため更新していません。末尾に apply を指定すると実行します。",
+    );
+    return {
+      ...analysis,
+      mode: "dry-run",
+      deleted: 0,
+      updated: 0,
+      waitMs,
+    };
+  }
+
+  if (analysis.unmatchedDailyAttendances > 0) {
+    throw new Error(
+      "対応するOperationResultを特定できないDailyAttendanceがあるため中断しました。",
+    );
+  }
+  if (analysis.oldDailyAttendances === 0) {
+    console.log("\nℹ️  旧形式DailyAttendanceがないため更新は不要です。");
+    return {
+      ...analysis,
+      mode: "apply",
+      deleted: 0,
+      updated: 0,
+      waitMs,
+    };
+  }
+  if (analysis.targetOperationResults === 0) {
+    throw new Error(
+      "更新対象OperationResultがないため、DailyAttendanceを削除せず中断しました。",
+    );
+  }
+
+  const db = admin.firestore();
+  const dailyAttendancePaths = analysis.matched.map(({ path }) => path);
+
+  console.log("\n🗑️  旧形式DailyAttendanceを削除します");
+  let deleted = 0;
+  for (const path of dailyAttendancePaths) {
+    await db.doc(path).delete();
+    deleted++;
+    console.log(
+      `  ✅ ${deleted}/${dailyAttendancePaths.length}件 削除: ${path}`,
+    );
+  }
+
+  console.log("\n🔄 対象OperationResultの更新トリガーを順次起動します");
+  let updated = 0;
+  for (const path of analysis.operationResultPaths) {
+    await db.doc(path).update({
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    updated++;
+    console.log(
+      `  ✅ ${updated}/${analysis.operationResultPaths.length}件 更新: ${path}`,
+    );
+
+    if (
+      updated < analysis.operationResultPaths.length &&
+      waitMs > 0
+    ) {
+      await sleep(waitMs);
+    }
+  }
+
+  console.log("\n✅ 選択的再構築マイグレーションの書き込み完了");
+  console.log(
+    "OperationResult更新トリガーによるDailyAttendance再構築の完了を確認してください。",
+  );
+
+  return {
+    ...analysis,
+    mode: "apply",
+    deleted,
+    updated,
+    waitMs,
+  };
+}
+
+/**
+ * OperationResult 全体の保存データか、旧 OperationResultDetail かを判別します。
+ *
+ * @param {*} item
+ * @returns {boolean}
+ */
+function isFullOperationResult(item) {
+  return (
+    item !== null &&
+    typeof item === "object" &&
+    (Array.isArray(item.workers) ||
+      Array.isArray(item.employees) ||
+      Array.isArray(item.outsourcers))
+  );
+}
+
+/**
+ * @param {Object} options
+ * @param {string} options.companyId
+ * @param {string} options.employeeId
+ * @param {string} options.date
+ * @returns {string}
+ */
+function createAttendanceKey({ companyId, employeeId, date }) {
+  return `${companyId}/${employeeId}/${date}`;
+}
+
+/**
+ * DailyAttendance のドキュメントIDから勤怠日を取得します。
+ *
+ * @param {FirebaseFirestore.QueryDocumentSnapshot} doc
+ * @returns {string|null}
+ */
+function getDailyAttendanceDate(doc) {
+  const { employeeId, date } = doc.data();
+  if (typeof date === "string" && date) return date;
+  if (
+    typeof employeeId === "string" &&
+    doc.id.startsWith(`${employeeId}_`)
+  ) {
+    return doc.id.slice(employeeId.length + 1) || null;
+  }
+  return null;
+}
+
+// ============================================================================
+// DailyAttendance 全件再構築マイグレーション
+// ============================================================================
+
+const DAILY_ATTENDANCE_REBUILD_WAIT_MS = 1000;
+
+/**
+ * 全会社の DailyAttendance を削除した後、全 OperationResult の updatedAt を
+ * 逐次更新し、OperationResult 更新トリガーによる DailyAttendance 再構築を要求します。
+ *
+ * OperationResult 更新トリガーは Billing や SiteEmployeeHistory の同期も行うため、
+ * Firestore への負荷とトリガー同士の競合を避ける目的で、更新間に待機時間を設けます。
+ *
+ * @param {Object} options
+ * @param {boolean} options.apply - true の場合のみ Firestore を更新
+ * @param {number} options.waitMs - OperationResult 1件ごとの更新待機時間
+ * @returns {Promise<Object>}
+ */
+async function runDailyAttendanceRebuildMigration({
+  apply = false,
+  waitMs = DAILY_ATTENDANCE_REBUILD_WAIT_MS,
+} = {}) {
+  if (!Number.isInteger(waitMs) || waitMs < 0) {
+    throw new Error("waitMs must be a non-negative integer");
+  }
+
+  const db = admin.firestore();
+  const [dailyAttendancesSnapshot, operationResultsSnapshot] =
+    await Promise.all([
+      db.collectionGroup("DailyAttendances").get(),
+      db.collectionGroup("OperationResults").get(),
+    ]);
+
+  console.log("\n🚀 DailyAttendance 全件再構築マイグレーション");
+  console.log("対象会社: すべての会社");
+  console.log(`モード: ${apply ? "更新" : "ドライラン"}`);
+  console.log(
+    `削除対象 DailyAttendance: ${dailyAttendancesSnapshot.size}件`,
+  );
+  console.log(
+    `更新対象 OperationResult: ${operationResultsSnapshot.size}件`,
+  );
+  console.log(`OperationResult 更新間隔: ${waitMs}ms`);
+
+  if (!apply) {
+    console.log(
+      "\nℹ️  ドライランのため更新していません。末尾に apply を指定すると実行します。",
+    );
+    return {
+      mode: "dry-run",
+      dailyAttendances: dailyAttendancesSnapshot.size,
+      operationResults: operationResultsSnapshot.size,
+      deleted: 0,
+      updated: 0,
+      waitMs,
+    };
+  }
+
+  if (
+    dailyAttendancesSnapshot.size > 0 &&
+    operationResultsSnapshot.size === 0
+  ) {
+    throw new Error(
+      "OperationResult was not found. Aborting before deleting DailyAttendance.",
+    );
+  }
+
+  let deleted = 0;
+  console.log("\n🗑️  DailyAttendanceを削除します");
+
+  for (const doc of dailyAttendancesSnapshot.docs) {
+    await doc.ref.delete();
+    deleted++;
+    console.log(
+      `  ✅ ${deleted}/${dailyAttendancesSnapshot.size}件 削除: ${doc.ref.path}`,
+    );
+  }
+
+  console.log("\n🔄 OperationResult更新トリガーを順次起動します");
+
+  let updated = 0;
+  for (const doc of operationResultsSnapshot.docs) {
+    await doc.ref.update({
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    updated++;
+    console.log(
+      `  ✅ ${updated}/${operationResultsSnapshot.size}件 更新: ${doc.ref.path}`,
+    );
+
+    if (updated < operationResultsSnapshot.size && waitMs > 0) {
+      await sleep(waitMs);
+    }
+  }
+
+  console.log("\n✅ マイグレーション書き込み完了");
+  console.log(
+    "OperationResult更新トリガーと、各派生ドキュメントの再構築完了をFunctionsログで確認してください。",
+  );
+
+  return {
+    mode: "apply",
+    dailyAttendances: dailyAttendancesSnapshot.size,
+    operationResults: operationResultsSnapshot.size,
+    deleted,
+    updated,
+    waitMs,
+  };
+}
+
+/**
+ * @param {number} milliseconds
+ * @returns {Promise<void>}
+ */
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 // ============================================================================
 // Billing 消費税計算バージョン マイグレーション

@@ -429,6 +429,67 @@ migrationCmd
     });
   });
 
+migrationCmd
+  .command("daily-attendance-rebuild-analysis")
+  .description(
+    "旧形式DailyAttendanceと再構築に必要なOperationResultを読み取り専用で調査",
+  )
+  .action(async () => {
+    await migrationCommands.analyzeDailyAttendanceSelectiveRebuild();
+  });
+
+migrationCmd
+  .command("daily-attendance-selective-rebuild [mode]")
+  .description(
+    "旧形式DailyAttendanceだけを削除し、必要なOperationResultだけを更新して再構築",
+  )
+  .option(
+    "--wait-ms <milliseconds>",
+    "OperationResult更新後の待機時間（ミリ秒）",
+    "1000",
+  )
+  .action(async (mode, options) => {
+    if (mode && mode.toLowerCase() !== "apply") {
+      throw new Error("mode must be 'apply' or omitted");
+    }
+
+    const waitMs = Number(options.waitMs);
+    if (!Number.isInteger(waitMs) || waitMs < 0) {
+      throw new Error("--wait-ms must be a non-negative integer");
+    }
+
+    await migrationCommands.runDailyAttendanceSelectiveRebuildMigration({
+      apply: mode?.toLowerCase() === "apply",
+      waitMs,
+    });
+  });
+
+migrationCmd
+  .command("daily-attendance-rebuild [mode]")
+  .description(
+    "全会社のDailyAttendanceを削除し、OperationResult更新トリガーで再構築",
+  )
+  .option(
+    "--wait-ms <milliseconds>",
+    "OperationResult更新後の待機時間（ミリ秒）",
+    "1000",
+  )
+  .action(async (mode, options) => {
+    if (mode && mode.toLowerCase() !== "apply") {
+      throw new Error("mode must be 'apply' or omitted");
+    }
+
+    const waitMs = Number(options.waitMs);
+    if (!Number.isInteger(waitMs) || waitMs < 0) {
+      throw new Error("--wait-ms must be a non-negative integer");
+    }
+
+    await migrationCommands.runDailyAttendanceRebuildMigration({
+      apply: mode?.toLowerCase() === "apply",
+      waitMs,
+    });
+  });
+
 // ヘルプの改善
 program.on("--help", () => {
   console.log("");
