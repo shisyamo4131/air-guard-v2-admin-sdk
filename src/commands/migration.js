@@ -51,8 +51,7 @@ FireModel.setAdapter(new ServerAdapter(admin.firestore()));
  * MAIN MODULE
  *****************************************************************************/
 async function runMigration() {
-  // throw new Error("マイグレーション処理は現在定義されていません。");
-  await runTokenMapMigration();
+  throw new Error("マイグレーション処理は現在定義されていません。");
 }
 
 /*****************************************************************************
