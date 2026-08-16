@@ -33,26 +33,28 @@ async function setSuperUserClaim(uid) {
 }
 
 /**
- * スーパーユーザークレームを削除
+ * スーパーユーザー権限を解除
  * @param {string} uid - ユーザーのUID
  */
 async function removeSuperUserClaim(uid) {
   try {
-    console.log(`\n🔧 スーパーユーザークレームを削除中...`);
+    console.log(`\n🔧 スーパーユーザー権限を解除中...`);
     console.log(`UID: ${uid}`);
 
     // 現在のカスタムクレームを取得
     const user = await admin.auth().getUser(uid);
     const currentClaims = user.customClaims || {};
 
-    // スーパーユーザークレームを削除
-    const newClaims = { ...currentClaims };
-    delete newClaims.isSuperUser;
+    // claim schemaを維持したままスーパーユーザー権限を解除
+    const newClaims = {
+      ...currentClaims,
+      isSuperUser: false,
+    };
 
     // カスタムクレームを設定
     await admin.auth().setCustomUserClaims(uid, newClaims);
 
-    console.log("\n✅ スーパーユーザークレームを削除しました");
+    console.log("\n✅ スーパーユーザー権限を解除しました");
     console.log(`Email: ${user.email}`);
     console.log(`カスタムクレーム:`, JSON.stringify(newClaims, null, 2));
     console.log("\n⚠️  ユーザーは次回ログイン時に権限が更新されます");

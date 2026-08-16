@@ -17,7 +17,7 @@
 | コマンド                        | 説明                         | 引数               | 実装状況    |
 | ------------------------------- | ---------------------------- | ------------------ | ----------- |
 | `claims set-superuser <uid>`    | スーパーユーザークレーム設定 | `uid`: ユーザー ID | ✅ 実装済み |
-| `claims remove-superuser <uid>` | スーパーユーザークレーム削除 | `uid`: ユーザー ID | ✅ 実装済み |
+| `claims remove-superuser <uid>` | スーパーユーザー権限解除（`isSuperUser: false`） | `uid`: ユーザー ID | ✅ 実装済み |
 | `claims set-developer <uid>`    | デベロッパークレーム設定     | `uid`: ユーザー ID | ✅ 実装済み |
 | `claims remove-developer <uid>` | デベロッパークレーム削除     | `uid`: ユーザー ID | ✅ 実装済み |
 
@@ -75,6 +75,7 @@
 | `migration customer-abbreviation` | Customer abbreviationマイグレーション処理 | なし | ✅ 実装済み |
 | `migration billing-calculation [companyId] [apply]` | Billing税額計算バージョンの再同期（会社ID省略時は全会社、既定はドライラン） | なし | ✅ 実装済み |
 | `migration billing-calculation-retry [apply]` | Billing再同期に失敗した11件のOperationResultを逐次再更新する一時マイグレーション | なし | ✅ 実装済み |
+| `migration is-super-user-claim [apply]` | 所属済みAuthの未設定`isSuperUser`を`false`へ正規化（既定はdry-run） | `apply`: 更新時だけ指定 | ✅ 実装済み |
 |                                   | name → abbreviation（株式会社等を削除）   |      |             |
 |                                   | ⚠️ 必ず Emulator 環境でテスト後に本番実行 |      |             |
 |                                   | ⚠️ 冪等性あり（複数回実行しても安全）     |      |             |
@@ -188,10 +189,10 @@ Email: admin@example.com
 ⚠️  ユーザーは次回ログイン時に新しい権限が適用されます
 ```
 
-#### ✅ スーパーユーザークレーム削除
+#### ✅ スーパーユーザー権限解除
 
 ```bash
-# スーパーユーザークレームを削除
+# 他のclaimを保持してisSuperUserをfalseへ変更
 npm run cli claims remove-superuser abc123def456
 npm run cli:emulator claims remove-superuser abc123def456
 
@@ -202,13 +203,14 @@ node src/cli.js --env emulator claims remove-superuser abc123def456
 
 **出力例:**
 ```
-🔧 スーパーユーザークレームを削除中...
+🔧 スーパーユーザー権限を解除中...
 UID: abc123def456
 
-✅ スーパーユーザークレームを削除しました
+✅ スーパーユーザー権限を解除しました
 Email: admin@example.com
 カスタムクレーム: {
-  "companyId": "company123"
+  "companyId": "company123",
+  "isSuperUser": false
 }
 
 ⚠️  ユーザーは次回ログイン時に権限が更新されます
@@ -1156,6 +1158,24 @@ cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/Customers.json
 ## 🔄 データマイグレーション
 
 データ構造の変更が必要な場合に、一度きりのマイグレーション処理を実行します。
+
+### `isSuperUser` claimの正規化
+
+所属済みAuthentication User、Company、同一UIDの本登録Userが整合するアカウントだけを対象に、未設定の`isSuperUser`を`false`へ正規化します。既定は読み取り専用のdry-runです。不正claim、identity不整合、読取errorが1件でもある場合、applyは書き込み前に停止します。Emulatorまたは明示的なDev環境だけで実行でき、Prod環境では拒否されます。
+
+```bash
+# 1. Emulatorでdry-run
+npm run cli:emulator -- migration is-super-user-claim
+
+# 2. Emulatorで適用し、再度dry-run
+npm run cli:emulator -- migration is-super-user-claim apply
+npm run cli:emulator -- migration is-super-user-claim
+
+# 3. 個別承認後にDevで同じ順序を実行
+npm run cli:dev -- migration is-super-user-claim
+npm run cli:dev -- migration is-super-user-claim apply
+npm run cli:dev -- migration is-super-user-claim
+```
 
 ### 基本的な使用方法
 

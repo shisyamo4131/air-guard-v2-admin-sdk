@@ -43,6 +43,9 @@ const systemCommands = require("./commands/system");
 const companiesCommands = require("./commands/companies");
 const backupCommands = require("./commands/backup");
 const migrationCommands = require("./commands/migration");
+const {
+  migrateIsSuperUserClaim,
+} = require("./commands/migrateIsSuperUserClaim");
 
 // プログラムの基本設定
 program
@@ -430,6 +433,20 @@ migrationCmd
   });
 
 migrationCmd
+  .command("is-super-user-claim [mode]")
+  .description(
+    "既存AuthenticationアカウントのisSuperUser未設定値をfalseへ正規化（既定はdry-run）",
+  )
+  .action(async (mode) => {
+    if (mode && mode.toLowerCase() !== "apply") {
+      throw new Error("mode must be 'apply' or omitted");
+    }
+    await migrateIsSuperUserClaim({
+      apply: mode?.toLowerCase() === "apply",
+    });
+  });
+
+migrationCmd
   .command("daily-attendance-rebuild-analysis")
   .description(
     "旧形式DailyAttendanceと再構築に必要なOperationResultを読み取り専用で調査",
@@ -503,6 +520,7 @@ program.on("--help", () => {
   console.log("  $ npm run cli companies info <companyId>");
   console.log("  $ npm run cli:emulator companies delete <companyId>");
   console.log("  $ npm run cli:emulator migration");
+  console.log("  $ npm run cli:emulator migration is-super-user-claim");
   console.log("");
   console.log("直接実行:");
   console.log("  $ node src/cli.js users list");
