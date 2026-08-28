@@ -14,6 +14,7 @@
     "backup:local:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=local node src/cli.js --env emulator backup",
     "backup:firebase:emulator": "cross-env FIREBASE_ENV=dev STORAGE_TYPE=firebase node src/cli.js --env emulator backup",
     "test:ccb-safety": "node --test test/company-configuration-boundary.test.js",
+    "test:backup-coverage": "node --test test/backup-coverage.test.js",
     "install:firemodel": "npm install @shisyamo4131/air-firebase-v2@dev",
     "install:adapter": "npm install @shisyamo4131/air-firebase-v2-server-adapter@dev",
     "install:schemas@dev": "npm install --save-exact @shisyamo4131/air-guard-v2-schemas@2.4.2-dev.167"

@@ -15,6 +15,10 @@ const { createStorageAdapterFromEnv } = require("../storage");
 const {
   assertLegacyCompanyOperationSupported,
 } = require("../safety/companyConfigurationBoundary");
+const {
+  createBackupCoverageMetadata,
+  formatBackupCoverageLines,
+} = require("../backupCoverage");
 
 const DEFAULT_BACKUP_DIR = "./backups";
 
@@ -288,6 +292,7 @@ async function backupCompany(companyId, options = {}) {
       totalAuthUsers: backupData.metadata.totalAuthUsers,
       collections: backupData.metadata.collections.join(","),
       environment: environment, // EMULATOR, DEV, PROD
+      ...createBackupCoverageMetadata(),
     };
 
     // StorageAdapterで保存
@@ -427,6 +432,7 @@ async function snapshotCompany(companyId, options = {}) {
       collections: snapshotData.metadata.collections.join(","),
       environment: environment,
       isSnapshot: true, // スナップショットであることを示すフラグ
+      ...createBackupCoverageMetadata(),
     };
 
     // 6. StorageAdapterで保存
@@ -1351,18 +1357,15 @@ async function listBackups(companyId = null, options = {}) {
         b.path.localeCompare(a.path),
       )) {
         const filename = path.basename(fileInfo.path);
-        let metadata = fileInfo.metadata;
-
-        // customMetadataがない場合（Storage Emulatorなど）、ファイルから取得
-        if (!metadata || !metadata.timestamp) {
-          const loaded = await storage.load(fileInfo.path);
-          metadata = loaded.metadata;
-        }
+        const metadata = fileInfo.metadata || {};
 
         console.log(`  📄 ${filename}`);
-        console.log(`     日時: ${metadata.timestamp}`);
-        console.log(`     ドキュメント数: ${metadata.totalDocuments}`);
-        console.log(`     ユーザー数: ${metadata.totalAuthUsers}`);
+        console.log(`     日時: ${metadata.timestamp ?? "不明"}`);
+        console.log(`     ドキュメント数: ${metadata.totalDocuments ?? "不明"}`);
+        console.log(`     ユーザー数: ${metadata.totalAuthUsers ?? "不明"}`);
+        for (const line of formatBackupCoverageLines(metadata)) {
+          console.log(`     ${line}`);
+        }
         console.log("");
       }
 
@@ -1398,18 +1401,15 @@ async function listBackups(companyId = null, options = {}) {
         const latestFile = files.sort((a, b) =>
           b.path.localeCompare(a.path),
         )[0];
-        let metadata = latestFile.metadata;
-
-        // customMetadataがない場合（Storage Emulatorなど）、ファイルから取得
-        if (!metadata || !metadata.companyName) {
-          const loaded = await storage.load(latestFile.path);
-          metadata = loaded.metadata;
-        }
+        const metadata = latestFile.metadata || {};
 
         console.log(`  🏢 ${companyId}`);
-        console.log(`     会社名: ${metadata.companyName}`);
+        console.log(`     会社名: ${metadata.companyName ?? "不明"}`);
         console.log(`     バックアップ数: ${files.length}件`);
-        console.log(`     最新: ${metadata.timestamp}`);
+        console.log(`     最新: ${metadata.timestamp ?? "不明"}`);
+        for (const line of formatBackupCoverageLines(metadata)) {
+          console.log(`     ${line}`);
+        }
         console.log("");
       }
 

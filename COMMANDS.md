@@ -49,7 +49,7 @@
 
 | コマンド                              | 説明                                                    | 引数                                   | 実装状況    |
 | ------------------------------------- | ------------------------------------------------------- | -------------------------------------- | ----------- |
-| `backup company <companyId>`          | 会社データをバックアップ（固定ファイル保存）            | `companyId`: 会社 ID                   | ✅ 実装済み |
+| `backup company <companyId>`          | legacy会社データを限定backup（coverage: INCOMPLETE）     | `companyId`: 会社 ID                   | ✅ 実装済み |
 |                                       | オプション: `-o, --output` 出力先指定                   |                                        |             |
 | `backup snapshot <companyId>`         | スナップショット取得（自動で差分計算実行）              | `companyId`: 会社 ID                   | ✅ 実装済み |
 |                                       | 保存先: `temporary/companies/{companyId}/snapshot.json` |                                        |             |
@@ -61,8 +61,8 @@
 | `backup restore-full <companyId>`     | フルバックアップリストア（全ドキュメント、緊急用）      | `companyId`: 会社 ID                   | ✅ 実装済み |
 |                                       | オプション: `--collections` コレクション指定（複数可）  |                                        |             |
 |                                       | ⚠️ メンテナンスモード必須                               |                                        |             |
-| `backup restore-complete <companyId>` | 完全リストア（Firestore + Authentication）              | `companyId`: 会社 ID                   | ✅ 実装済み |
-|                                       | 最新バックアップから自動選択、全データ復元              |                                        |             |
+| `backup restore-complete <companyId>` | legacy対象scope + Authenticationの破壊的リストア         | `companyId`: 会社 ID                   | ✅ 実装済み |
+|                                       | 最新backupから自動選択。CCB/PrivateSettings等は対象外    |                                        |             |
 |                                       | 仮パスワード自動生成・ファイル保存                      |                                        |             |
 |                                       | オプション: `--skip-confirmation` 確認スキップ          |                                        |             |
 | `backup list [companyId]`             | バックアップ一覧を表示                                  | `companyId`: 会社 ID（省略時は全会社） | ✅ 実装済み |
@@ -516,6 +516,8 @@ npm run cli:emulator companies delete company-id-123
 
 #### バックアップ・リストア
 
+> **coverageは常に`INCOMPLETE`です。** 設定済みlegacy scopeはArticles、Customers、Customers_archive、Sites、Sites_archive、Employees、Employees_archive、Outsourcers、Outsourcers_archive、SiteOperationSchedules、OperationResults、Billings、DailyAttendances、ArrangementNotifications、Autonumbers、Usersです。verified v1の`PrivateSettings` backupは`EXCLUDED`、`PrivateSettings` restore、`SettingAudits` restore、CCB backup/restoreは`UNAVAILABLE`です。新規artifactは`LEGACY_COMPANY_LOGICAL` v1、旧・欠損・不正・矛盾metadataは`LEGACY_UNVERSIONED / INCOMPLETE`かつPrivateSettings含有`UNVERIFIED`として一覧表示されます。
+
 ##### 会社のバックアップ（固定ファイル）
 
 ```bash
@@ -584,7 +586,7 @@ npm run cli:dev backup diff Qa1JpI7dLMjIXeW3lB2m
 npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
 npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers
 
-# 全コレクションをリストア
+# backupに含まれる全legacy対象コレクションをリストア
 npm run cli:emulator backup restore Qa1JpI7dLMjIXeW3lB2m --collections all
 ```
 
@@ -651,10 +653,10 @@ npm run cli:dev backup restore-full Qa1JpI7dLMjIXeW3lB2m --collections all
 - フルリストアでも Users コレクションは自動除外
 - Authentication 情報は変更されない
 
-##### 完全リストア（Authentication含む）⭐ NEW
+##### legacy完全リストア（Authentication含む・CCB対象外）⭐ NEW
 
 ```bash
-# 最新バックアップから完全リストア（Firestore + Authentication）
+# 最新バックアップからlegacy対象scope + Authenticationをリストア
 npm run cli:emulator backup restore-complete DU2gJlgO9HY1ny7xkA3m
 npm run cli:dev backup restore-complete DU2gJlgO9HY1ny7xkA3m
 
@@ -665,7 +667,7 @@ npm run cli:emulator backup restore-complete DU2gJlgO9HY1ny7xkA3m --skip-confirm
 **機能:**
 
 - 最新バックアップファイルを自動選択（タイムスタンプソート）
-- Firestore全コレクション + Authenticationユーザーを完全復元
+- backupに含まれるlegacy対象scope + Authenticationユーザーを復元
 - 既存データは自動削除（既存Authユーザー含む）
 - 異なる環境間でのリストア対応（Dev→Emulator等）
 - 仮パスワード自動生成（形式: `Temp{timestamp}{random}!`）
@@ -702,10 +704,10 @@ backups/temporary/companies/{companyId}/restored_users_passwords.json
 
 **ユースケース:**
 
-1. **環境間データ移行**: Dev環境→Emulator環境への完全コピー
-2. **テストデータ準備**: 本番データをEmulatorで再現
-3. **障害復旧**: 完全なデータ復元（Auth含む）
-4. **会社データリセット**: 既存データを完全に置き換え
+1. **legacy環境間データ移行**: 対象scopeをDev環境からEmulator環境へコピー
+2. **legacyテストデータ準備**: backupに含まれる範囲をEmulatorで再現
+3. **legacy障害復旧**: 対象scopeとAuthを復元
+4. **legacy会社データリセット**: 対象scopeとAuthを置き換え
 
 **注意事項:**
 
@@ -760,6 +762,10 @@ backups/temporary/companies/{companyId}/restored_users_passwords.json
 
 #### バックアップ一覧の表示
 
+一覧はlocalの`.metadata` sidecarまたはFirebase custom metadataだけを使い、backup payloadを読み込みません。sidecarのない旧local artifactは内容を開かず未検証として扱います。各項目に形式、coverage、legacy configured scope、`PrivateSettings` backup/restore、`SettingAudits` restore、CCB backup/restoreを表示します。
+
+local保存中は同一pathをPID/token lockで保護します。owner processの終了を確認できるorphanは次回saveで限定回収しますが、owner不明・破損lockは安全側に停止します。activeな`.lock`を手動削除しないでください。
+
 ```bash
 # 全会社のバックアップ一覧
 npm run cli:emulator backup list
@@ -783,6 +789,13 @@ npm run cli:emulator backup list -o ./custom-backups
 会社名: 株式会社唯心
 バックアップ数: 5 件
 最新: 2025/11/29 15:17:21
+形式: LEGACY_COMPANY_LOGICAL (v1)
+coverage: INCOMPLETE
+legacy configured scope: Articles,Customers,Customers_archive,Sites,Sites_archive,Employees,Employees_archive,Outsourcers,Outsourcers_archive,SiteOperationSchedules,OperationResults,Billings,DailyAttendances,ArrangementNotifications,Autonumbers,Users
+PrivateSettings backup: EXCLUDED
+PrivateSettings restore: UNAVAILABLE
+SettingAudits restore: UNAVAILABLE
+CCB backup / restore: UNAVAILABLE / UNAVAILABLE
 
 🏢 company-id-456
 会社名: テスト株式会社
@@ -805,6 +818,13 @@ npm run cli:emulator backup list -o ./custom-backups
 サイズ: 45.23 KB
 ドキュメント数: 43
 ユーザー数: 2
+形式: LEGACY_COMPANY_LOGICAL (v1)
+coverage: INCOMPLETE
+legacy configured scope: Articles,Customers,Customers_archive,Sites,Sites_archive,Employees,Employees_archive,Outsourcers,Outsourcers_archive,SiteOperationSchedules,OperationResults,Billings,DailyAttendances,ArrangementNotifications,Autonumbers,Users
+PrivateSettings backup: EXCLUDED
+PrivateSettings restore: UNAVAILABLE
+SettingAudits restore: UNAVAILABLE
+CCB backup / restore: UNAVAILABLE / UNAVAILABLE
 
 📄 backup_2025-11-28_10-30-15.json
 日時: 2025/11/28 10:30:15
@@ -878,6 +898,12 @@ npm run cli:emulator backup list -o ./custom-backups
 【データ処理】
 - マージ型リストア: 既存データに差分を適用（削除なし）
 - Cloud Functions待機: 適切な待機時間で依存関係を考慮
+
+【coverage境界】
+- legacy logical backup: INCOMPLETE
+- PrivateSettings backup: EXCLUDED
+- PrivateSettings / SettingAudits restore: UNAVAILABLE
+- CCB backup / restore: UNAVAILABLE
 - Timestamp保持: updatedAtなどのタイムスタンプを正確に復元
 
 【ワークフロー】
@@ -982,7 +1008,7 @@ npm run cli:emulator companies delete company-dev-123 --force
 
 ### バックアップ・リストアのワークフロー
 
-> **CCB tenantは未対応です。** Company rootに`schemaVersion`または`configurationState`がある場合、または`Settings`、`PrivateSettings`、`SettingAudits`のいずれかが存在する場合、backup、snapshot、diff、restore系、会社削除、会社別maintenance-on/offは書込み前に停止します。`--force`や確認省略で回避できません。CCB tenantのbackup・restore・削除・maintenanceは、対象データと復旧方法を固定した別のoperator手順を使用してください。
+> **CCB tenantは未対応です。** Company rootに`schemaVersion`または`configurationState`がある場合、または`Settings`、`PrivateSettings`、`SettingAudits`のいずれかが存在する場合、backup、snapshot、diff、restore系、会社削除、会社別maintenance-on/offは書込み前に停止します。`--force`や確認省略で回避できません。PrivateSettingsを既存logical backupへ追加してはならず、SettingAuditsのgeneric restoreも禁止です。CCB tenantのbackup・restore・削除・maintenanceは、対象データと復旧方法を固定した別のoperator手順を使用してください。
 
 #### 定期バックアップの取得
 
@@ -1009,7 +1035,7 @@ npm run cli:dev backup snapshot Qa1JpI7dLMjIXeW3lB2m
 # 4. 差分ベースリストア実行
 npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections Customers Sites
 
-# または全コレクション
+# またはbackupに含まれる全legacy対象コレクション
 npm run cli:dev backup restore Qa1JpI7dLMjIXeW3lB2m --collections all
 
 # 5. メンテナンスモードを無効化

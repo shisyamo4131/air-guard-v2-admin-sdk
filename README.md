@@ -8,8 +8,8 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 - **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除（🚧 未実装）
 - **システム管理**: メンテナンスモードの制御、システム設定管理 ✅
 - **会社管理**: 会社情報表示、ユーザー一覧、legacy会社データ一括削除 ✅
-- **バックアップ・リストア**: legacy Company schemaのFirestore + Authenticationバックアップと復元 ✅
-  - 差分ベースリストア、フルリストア、完全リストア（Auth含む）をサポート
+- **バックアップ・リストア**: legacy Company schemaの限定的なFirestore + Authenticationバックアップと復元 ✅
+  - 差分ベースリストア、フルリストア、legacy完全リストア（Auth含む）をサポート
   - 異なる環境間のデータ移行対応（Dev→Emulator等）
   - 仮パスワード自動生成・ファイル保存
 - **データマイグレーション**: 一度きりのデータ構造変更処理 ✅
@@ -21,7 +21,11 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 
 `@shisyamo4131/air-guard-v2-schemas`はexact `2.4.2-dev.167`を使用します。現行のバックアップ・復元・会社削除・会社別maintenanceコマンドは、CCBの`schemaVersion`/`configurationState`、または`Settings`、`PrivateSettings`、`SettingAudits`を検出すると、Auth削除やFirestore書込みより前に`CCB_UNSUPPORTED_OPERATION`で停止します。境界確認自体に失敗した場合も`CCB_BOUNDARY_CHECK_FAILED`で安全側に停止します。
 
-これはCCBデータを欠落させたまま「完全」と扱わないための互換ガードです。PrivateSettingsのbackup policy、SettingAuditsのrestore policy、CCB-aware tenant delete、provider maintenance手順が別途承認・実装されるまで、これらの旧コマンドをCCB tenantへ使用しないでください。legacy tenantへの既存動作は維持します。
+これはCCBデータを欠落させたまま「完全」と扱わないための互換ガードです。既存logical backupのcoverageは常に`INCOMPLETE`です。`PrivateSettings`は保存先・暗号化・IAM・保持・redaction・環境間restore契約がないため`EXCLUDED`、`PrivateSettings` restore、`SettingAudits` restore、CCB backup/restoreは`UNAVAILABLE`です。CCB-aware tenant deleteとprovider maintenanceも未提供です。これらの旧コマンドをCCB tenantへ使用しないでください。legacy tenantへの既存動作は維持します。
+
+新規backup/snapshotのmetadataには形式`LEGACY_COMPANY_LOGICAL` v1と上記coverageを文字列で保存します。local保存では一覧専用の`.metadata` sidecarも作成し、`backup list`はpayloadを読み込まずlocal sidecarまたはFirebase custom metadataだけでcoverageを表示します。verified v1だけが`PrivateSettings backup: EXCLUDED`で、sidecarのない旧artifact、欠損・不正・矛盾metadataは`LEGACY_UNVERSIONED / INCOMPLETE`かつ`PrivateSettings backup: UNVERIFIED`として安全側に表示します。
+
+local保存は同一pathの同時書込みをPID/token lockで拒否し、owner processが終了済みと確認できるorphanだけを次回saveで回収します。owner不明・lock破損時は自動削除せず停止します。activeな`.lock`を手動削除しないでください。
 
 ## 📁 プロジェクト構造
 
@@ -199,8 +203,8 @@ npm run cli:emulator backup diff <companyId>       # 差分計算（スタンド
 npm run cli:emulator backup restore <companyId> --collections Customers Sites  # 差分ベースリストア（推奨）
 npm run cli:emulator backup restore-full <companyId> --collections all        # フルバックアップリストア（緊急用）
 
-# 完全リストア（Authentication含む）⭐ NEW
-npm run cli:emulator backup restore-complete <companyId>  # Firestore + Auth完全復元
+# legacy完全リストア（Authentication含む）⭐ NEW
+npm run cli:emulator backup restore-complete <companyId>  # legacy対象scope + Authを復元
                                                           # 仮パスワード自動生成・保存
                                                           # 異なる環境間のデータ移行に最適
 
@@ -209,9 +213,9 @@ npm run cli:emulator backup list                   # 全バックアップ一覧
 npm run cli:emulator backup list <companyId>       # 会社のバックアップ一覧
 ```
 
-**完全リストアの特徴:**
+**legacy完全リストアの特徴:**
 
-- Firestore全コレクション + Authenticationユーザーを完全復元
+- backupに含まれるlegacy対象scope + Authenticationユーザーを復元
 - 最新バックアップを自動選択
 - 異なる環境間のデータ移行対応（Dev→Emulator等）
 - 仮パスワード自動生成・JSONファイル保存（`backups/temporary/companies/{companyId}/restored_users_passwords.json`）
@@ -317,7 +321,7 @@ async function example() {
 
 #### 概要
 
-会社データ（Firestore ドキュメント）のバックアップと、効率的な差分ベースリストアを提供します。
+legacy会社データ（Firestore ドキュメント）の限定的なlogical backupと、効率的な差分ベースリストアを提供します。CCBを含む完全backupではありません。
 
 **主要機能:**
 
@@ -330,9 +334,11 @@ async function example() {
 #### バックアップ対象
 
 - **会社ドキュメント**: `Companies/{companyId}`
-- **サブコレクション**: 10 コレクション（Customers, Sites, Employees, Outsourcers, SiteOperationSchedules, OperationResults, Billings, ArrangementNotifications, Autonumbers, Users）
+- **設定済みlegacyサブコレクション**: 16 コレクション（Articles, Customers, Customers_archive, Sites, Sites_archive, Employees, Employees_archive, Outsourcers, Outsourcers_archive, SiteOperationSchedules, OperationResults, Billings, DailyAttendances, ArrangementNotifications, Autonumbers, Users）
+- **意図的な除外**: `PrivateSettings`。`Settings`と`SettingAudits`もlegacy scopeには含まれず、CCB backup/restoreと専用restoreは利用不可
 - **保存先**: `backups/companies/{companyId}/backup_YYYY-MM-DD_HH-MM-SS.json`（JST）
 - **フォーマット**: JSON（Timestamp は ISO 文字列に変換）
+- **coverage**: `INCOMPLETE`。一覧では新形式を`LEGACY_COMPANY_LOGICAL (v1)`、旧・不正metadataを`LEGACY_UNVERSIONED (UNVERSIONED)`かつPrivateSettings含有`UNVERIFIED`として表示
 
 #### スナップショットと差分
 
@@ -534,6 +540,7 @@ cat temporary/companies/Qa1JpI7dLMjIXeW3lB2m/diff/summary.json
 - **定期バックアップ**: 重要な操作前には必ずバックアップを取得
 - **バックアップ管理**: 古いバックアップファイルの定期的な整理を推奨
 - **差分確認**: summary.json で変更内容を事前確認可能
+- **coverage境界**: `PrivateSettings` backupは`EXCLUDED`、`PrivateSettings`/`SettingAudits` restoreとCCB backup/restoreは`UNAVAILABLE`
 
 ### データ移行
 
