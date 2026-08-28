@@ -982,6 +982,8 @@ npm run cli:emulator companies delete company-dev-123 --force
 
 ### バックアップ・リストアのワークフロー
 
+> **CCB tenantは未対応です。** Company rootに`schemaVersion`または`configurationState`がある場合、または`Settings`、`PrivateSettings`、`SettingAudits`のいずれかが存在する場合、backup、snapshot、diff、restore系、会社削除、会社別maintenance-on/offは書込み前に停止します。`--force`や確認省略で回避できません。CCB tenantのbackup・restore・削除・maintenanceは、対象データと復旧方法を固定した別のoperator手順を使用してください。
+
 #### 定期バックアップの取得
 
 ```bash

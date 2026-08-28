@@ -7,8 +7,8 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 - **ユーザー管理**: メールアドレスから UID 取得 ✅（一覧表示・クレーム表示は 🚧 未実装）
 - **クレーム管理**: スーパーユーザー・デベロッパークレームの設定・削除（🚧 未実装）
 - **システム管理**: メンテナンスモードの制御、システム設定管理 ✅
-- **会社管理**: 会社情報表示、ユーザー一覧、会社データ一括削除 ✅
-- **バックアップ・リストア**: Firestore + Authentication の完全バックアップと復元 ✅
+- **会社管理**: 会社情報表示、ユーザー一覧、legacy会社データ一括削除 ✅
+- **バックアップ・リストア**: legacy Company schemaのFirestore + Authenticationバックアップと復元 ✅
   - 差分ベースリストア、フルリストア、完全リストア（Auth含む）をサポート
   - 異なる環境間のデータ移行対応（Dev→Emulator等）
   - 仮パスワード自動生成・ファイル保存
@@ -16,6 +16,12 @@ Firebase Admin SDK を使用して AirGuard アプリの管理操作を行うた
 - **環境対応**: Emulator・Dev・Prod 環境の切り替え対応 ✅
 - **CLI**: 統一されたコマンドラインインターフェース ✅
 - **プログラマティック API**: 他のプロジェクトから直接使用可能 ✅
+
+### CCB（Company Configuration Boundary）の安全境界
+
+`@shisyamo4131/air-guard-v2-schemas`はexact `2.4.2-dev.167`を使用します。現行のバックアップ・復元・会社削除・会社別maintenanceコマンドは、CCBの`schemaVersion`/`configurationState`、または`Settings`、`PrivateSettings`、`SettingAudits`を検出すると、Auth削除やFirestore書込みより前に`CCB_UNSUPPORTED_OPERATION`で停止します。境界確認自体に失敗した場合も`CCB_BOUNDARY_CHECK_FAILED`で安全側に停止します。
+
+これはCCBデータを欠落させたまま「完全」と扱わないための互換ガードです。PrivateSettingsのbackup policy、SettingAuditsのrestore policy、CCB-aware tenant delete、provider maintenance手順が別途承認・実装されるまで、これらの旧コマンドをCCB tenantへ使用しないでください。legacy tenantへの既存動作は維持します。
 
 ## 📁 プロジェクト構造
 

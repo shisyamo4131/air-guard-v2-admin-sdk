@@ -8,6 +8,9 @@ const {
   COMPANY_SUBCOLLECTIONS,
   TOP_LEVEL_COLLECTIONS,
 } = require("../constants/collections");
+const {
+  assertLegacyCompanyOperationSupported,
+} = require("../safety/companyConfigurationBoundary");
 
 /**
  * 会社情報を取得して表示
@@ -148,6 +151,13 @@ async function deleteCompany(companyId, options = {}) {
       return { success: false, reason: "company-not-found" };
     }
 
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "delete-company",
+      companyData: companyInfo,
+    });
+
     // 2. 削除対象ユーザーの取得
     console.log("\n🔍 削除対象ユーザーを検索しています...");
     const users = await listCompanyUsers(companyId, options);
@@ -284,6 +294,13 @@ async function enableMaintenanceMode(companyId, options = {}) {
 
     const companyData = companyDoc.data();
 
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "maintenance-on",
+      companySnapshot: companyDoc,
+    });
+
     // 既にメンテナンスモードの場合
     if (companyData.maintenanceMode === true) {
       console.log(`ℹ️  既にメンテナンスモードが有効になっています。`);
@@ -354,6 +371,13 @@ async function disableMaintenanceMode(companyId, options = {}) {
     }
 
     const companyData = companyDoc.data();
+
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "maintenance-off",
+      companySnapshot: companyDoc,
+    });
 
     // 既にメンテナンスモードが無効の場合
     if (companyData.maintenanceMode !== true) {

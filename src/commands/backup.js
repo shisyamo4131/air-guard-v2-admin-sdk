@@ -12,6 +12,9 @@ const path = require("path");
 const fs = require("fs").promises;
 const inquirer = require("inquirer");
 const { createStorageAdapterFromEnv } = require("../storage");
+const {
+  assertLegacyCompanyOperationSupported,
+} = require("../safety/companyConfigurationBoundary");
 
 const DEFAULT_BACKUP_DIR = "./backups";
 
@@ -156,20 +159,31 @@ async function getAuthUserInfo(uid) {
 /**
  * 会社データを収集
  */
-async function collectCompanyData(companyId) {
+async function collectCompanyData(companyId, boundary = {}) {
   const db = admin.firestore();
 
   console.log(`\n📦 会社データを収集しています... (ID: ${companyId})`);
 
   // 1. 会社ドキュメントを取得
   console.log("  📄 会社ドキュメントを取得中...");
-  const companyDoc = await db
-    .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
-    .doc(companyId)
-    .get();
+  const companyDoc =
+    boundary.companySnapshot ||
+    (await db
+      .collection(TOP_LEVEL_COLLECTIONS.COMPANIES)
+      .doc(companyId)
+      .get());
 
   if (!companyDoc.exists) {
     throw new Error(`会社ID ${companyId} が見つかりません。`);
+  }
+
+  if (!boundary.verified) {
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: boundary.operation || "backup",
+      companySnapshot: companyDoc,
+    });
   }
 
   const companyData = companyDoc.data();
@@ -331,6 +345,13 @@ async function snapshotCompany(companyId, options = {}) {
       throw new Error(`会社ID ${companyId} が見つかりません。`);
     }
 
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "snapshot",
+      companySnapshot: companyDoc,
+    });
+
     const companyData = companyDoc.data();
     const isMaintenanceMode = companyData.maintenanceMode === true;
 
@@ -379,7 +400,11 @@ async function snapshotCompany(companyId, options = {}) {
     }
 
     // 4. 現在のデータを収集
-    const snapshotData = await collectCompanyData(companyId);
+    const snapshotData = await collectCompanyData(companyId, {
+      companySnapshot: companyDoc,
+      operation: "snapshot",
+      verified: true,
+    });
 
     // 5. メタデータを準備
     let environment;
@@ -548,6 +573,14 @@ async function restoreCompany(backupFile, options = {}) {
     const metadata = loaded.metadata;
 
     const { companyId, company, subCollections, authUsers } = backupData;
+    const db = admin.firestore();
+
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "restore-complete",
+      backupData,
+    });
 
     console.log(`\n🏢 会社情報:`);
     console.log(`  - 会社名: ${company.companyName}`);
@@ -598,8 +631,6 @@ async function restoreCompany(backupFile, options = {}) {
         }
       }
     }
-
-    const db = admin.firestore();
 
     // 0. 既存データの削除確認（skipConfirmationオプションがfalseの場合のみ）
     if (!options.skipConfirmation) {
@@ -902,6 +933,13 @@ async function diffBackup(companyId, options = {}) {
     if (!companyDoc.exists) {
       throw new Error(`会社ID ${companyId} が見つかりません。`);
     }
+
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "diff",
+      companySnapshot: companyDoc,
+    });
 
     const companyData = companyDoc.data();
     const isMaintenanceMode = companyData.maintenanceMode === true;
@@ -1406,6 +1444,13 @@ async function restoreSelective(companyId, options = {}) {
       throw new Error(`会社ID ${companyId} が見つかりません。`);
     }
 
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "restore-selective",
+      companySnapshot: companyDoc,
+    });
+
     const companyData = companyDoc.data();
     const isMaintenanceMode = companyData.maintenanceMode === true;
 
@@ -1484,6 +1529,14 @@ async function restoreSelective(companyId, options = {}) {
     const loaded = await storage.load(latestBackup.path);
     const backupData = loaded.data;
     const { subCollections } = backupData;
+
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "restore-selective",
+      companySnapshot: companyDoc,
+      backupData,
+    });
 
     console.log(
       `   バックアップ日時: ${new Date(backupData.backupDate).toLocaleString(
@@ -1605,6 +1658,13 @@ async function restoreDiff(companyId, options = {}) {
     if (!companyDoc.exists) {
       throw new Error(`会社ID ${companyId} が見つかりません。`);
     }
+
+    await assertLegacyCompanyOperationSupported({
+      db,
+      companyId,
+      operation: "restore-diff",
+      companySnapshot: companyDoc,
+    });
 
     const companyData = companyDoc.data();
     const isMaintenanceMode = companyData.maintenanceMode === true;

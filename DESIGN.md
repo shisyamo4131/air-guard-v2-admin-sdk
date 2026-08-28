@@ -44,7 +44,17 @@ AirGuard Admin SDK は Firebase Admin SDK を使用して、AirGuard アプリ�
 1. **安全性最優先**: 削除・リストア操作には確認プロセスを必須とする
 2. **環境分離**: Emulator / Dev / Prod を明確に分離
 3. **監査証跡**: 重要な操作はログとメタデータで記録
-4. **スキーマ検証の回避**: Admin SDK は Firestore ルール以外の検証を迂回するため、通常データ投入には使用しない
+4. **スキーマ境界のfail closed**: Admin SDK は Firestore Rulesを迂回するため、未対応schemaを検出した操作は書込み前に停止する
+
+### CCB互換ガード（2026-08-28）
+
+現行のバックアップcatalogはlegacy Company schema用であり、CCBの`Settings`、`PrivateSettings`、`SettingAudits`を完全・安全に保存または復元する契約を持たない。特にPrivateSettingsの保存範囲とSettingAuditsの復元可否は未確定である。そのため、CCB collectionを既存catalogへ単純追加せず、次の操作をfail closedにする。
+
+- backup、snapshot、diff、選択・差分・完全restore
+- 会社データ一括削除
+- legacy root fieldを書き換える会社別maintenance-on/off
+
+Company root markerまたはCCB collectionを検出した場合は`CCB_UNSUPPORTED_OPERATION`、検査に失敗した場合は`CCB_BOUNDARY_CHECK_FAILED`で停止する。backup payload側のmarker/collectionも完全restore前に検査する。legacy tenantの既存動作は維持し、CCB対応はbackup policy、audit restore、tenant delete、provider maintenanceを固定した後続設計で追加する。
 
 ---
 
